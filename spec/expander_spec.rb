@@ -1,8 +1,9 @@
 $:.unshift "spec/"
 
 require './spec/spec_helper'
-
-Dir["./lib/xiki/*_handler.rb"].each{|o|
+require "xiki/core/launcher"
+require "xiki/core/xik"
+Dir["./lib/xiki/handlers/*_handler.rb"].each{|o|
   require o.sub("./lib/", "")
 }
 
@@ -44,10 +45,10 @@ describe Expander, "#expand_file_path" do
   end
 
   it "expands bookmarks" do
-    stub(Bookmarks).[]("$d") {"/tmp/dir/"}
-    Expander.expand_file_path("$d/a//b").should == "/tmp/dir/a//b"
-    Expander.expand_file_path("$d").should == "/tmp/dir"
-    Expander.expand_file_path("$d/").should == "/tmp/dir/"
+    stub(Bookmarks).[](":d") {"/tmp/dir/"}
+    Expander.expand_file_path(":d/a//b").should == "/tmp/dir/a//b"
+    Expander.expand_file_path(":d").should == "/tmp/dir"
+    Expander.expand_file_path(":d/").should == "/tmp/dir/"
   end
 
   it "doesn't remove double slashes for home and current dir" do
@@ -56,8 +57,8 @@ describe Expander, "#expand_file_path" do
   end
 
   it "doesn't remove double slashes for bookmarks" do
-    stub(Bookmarks).[](":f") {"/tmp/file.txt"}
-    Expander.expand_file_path(":f//").should == "/tmp/file.txt//"
+    stub(Bookmarks).[](":n") {"/tmp/file.txt"}
+    Expander.expand_file_path(":n//").should == "/tmp/file.txt//"
   end
 end
 
@@ -215,10 +216,10 @@ describe Expander, "#parse" do
 
 
 
-  it "moves dropdown items into :dropdown" do
+  it "moves task items into :task" do
     options = Expander.parse("hi/* delete")
     options.should == {
-      :dropdown=>"delete",
+      :task=>"delete",
       :name=>"hi",
       :path=>"hi",
     }
@@ -228,23 +229,39 @@ describe Expander, "#parse" do
     # options = Expander.parse("select * from/* delete")
     # options = Expander.parse("/tmp/* delete")
 
-  it "moves pattern dropdown items into :dropdown" do
+  it "moves pattern task items into :task" do
     options = Expander.parse("select * from hi/* delete")
     options.should == {
-      :dropdown=>"delete",
+      :task=>"delete",
       :path=>"select * from hi"
     }
   end
 
-  it "moves file dropdown items into :dropdown" do
+  it "moves file task items into :task" do
     options = Expander.parse("/tmp/* delete")
     options.should == {
-      :dropdown=>"delete",
+      :task=>"delete",
       :file_path=>"/tmp"
     }
   end
 
 
+end
+
+describe Expander, "#expand_literal_command method" do
+  before(:each) do
+    stub_menu_path_dirs   # Has to be before each for some reason
+  end
+
+  it "expands command text with path" do
+    txt = Expander.expand_literal_command "a/\n  b", :path=>"a"
+    txt.should == 'b'
+  end
+
+  it "expands when embedded code" do
+    txt = Expander.expand_literal_command "a/\n  ! 1 + 1", :path=>"a"
+    txt.should == '2'
+  end
 end
 
 describe Expander, "#expand method" do
@@ -280,9 +297,17 @@ describe Expander, "#expand method" do
     Expander.expand("#{Xiki.dir}spec/fixtures/menu/dr//").should == "+ a/\n+ b/\n"
   end
 
+  it "expands when literal text of command passed" do
+    Expander.expand(["a"], :command_text=>"a/\n  b").should == "b"
+  end
+
+  it "expands when literal text of command with path" do
+    Expander.expand(["a/b"], :command_text=>"a/\n  b/\n    c").should == "c"
+  end
+
 end
 
-describe Expander, ".extract_dropdown_items" do
+describe Expander, ".extract_task_items" do
   before(:each) do
     stub_menu_path_dirs   # Has to be before each for some reason
   end

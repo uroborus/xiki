@@ -212,6 +212,8 @@ module Xiki
 
     Keys.map_reset
 
+    FileTree.define_styles
+    Color.define_styles
     Notes.define_styles
     Notes.init
     Notes.keys  # Define local keys
@@ -228,7 +230,6 @@ module Xiki
     # If we're reloading on top of a process after a fork, delegate to .reload...
 
     return self.reload if @@loaded_already
-
     @@loaded_already = true
 
     # Not loaded yet, so call .init methods of many classes...
@@ -273,7 +274,8 @@ module Xiki
     self.unified_init
     if ! options[:minimal]
       self.awesome_print_setup
-      self.yaml_setup
+      # This apparently isn't necessary anymore, and caused ruby 2.2 issues.
+      # self.yaml_setup
     end
 
     # If the first time we've loaded, open =welcome (if not xsh)...
@@ -470,11 +472,11 @@ module Xiki
     ancestors && ancestors[-1][/\A[*^~?]?([\w ]+)\/$/, 1]
   end
 
-  def self.yaml_setup
-    Kernel.require 'yaml'
-
-    YAML::ENGINE.yamler='syck' if Xiki.environment != 'web'
-  end
+  #   def self.yaml_setup
+  #     Kernel.require 'yaml'
+  #
+  #     YAML::ENGINE.yamler='syck' if Xiki.environment != 'web'
+  #   end
 
   def self.awesome_print_setup
     begin
@@ -531,6 +533,9 @@ module Xiki
     Clipboard.init_in_client
     Tree.init_in_client
     Themes.init_in_client
+    History.init_in_client
+    Deck.init_in_client
+    Ruby.init_in_client
   end
 
   class << self

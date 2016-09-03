@@ -2,7 +2,7 @@ module Xiki
   class Invoker
     # Invokes actions on menu source classes.
     #
-    # The actioun is often the .menu method, but could alternateyl be handled
+    # The actioun is often the .menu method, but could alternately be handled
     # by the MENU constant or the foo.menu file.  Also, MENU or foo.menu may route
     # to a different method, in which case that will be invoked.
     #
@@ -207,7 +207,7 @@ module Xiki
         return nil if some_method_ran   # Only say "no output" if didn't call .menu, .menu_before|_after, or other action
 
         # For now, let's try not doing this
-        txt = "<! no output!" if options[:client] =~ /^editor\b/
+        txt = "" if options[:client] =~ /^editor\b/
       end
 
       txt

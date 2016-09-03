@@ -1,7 +1,8 @@
 module Xiki
   class MenuHandler
     def self.handle options
-      source_file = options[:handlers]['menu']
+      source_file = options[:handlers]['menu'] || options[:handlers]['xiki']
+
       return if ! source_file || options[:output] || options[:halt]
       file = "#{options[:enclosing_source_dir]}#{source_file}"
 
@@ -47,7 +48,13 @@ module Xiki
       elsif code =~ /\A.* # \.py/   # If Python
         returned = PythonHandler.eval code, options.merge(:file=>source_file)
       else   # If Ruby
-        code = "args = #{exclamations_args.inspect}\n#{code}"
+
+        options = options[:eval] if options && options[:eval].is_a?(Hash)   # So what we passed in :eval is avaliable as the 'options' param
+
+        # This overrides the args and path of the root menu with one relative to this !... code.
+        # They can still get the full paths via options.
+        options[:path_relative], options[:args_relative] = Path.join(exclamations_args), exclamations_args
+
         returned, out, exception = Code.eval code, source_file, line_number, {}, options
       end
 
@@ -56,6 +63,7 @@ module Xiki
 
       txt.replace(
         if exception
+          options[:error] = 1
           CodeTree.draw_exception exception, code
         else
           returned   # Otherwise, just return return value or stdout!"

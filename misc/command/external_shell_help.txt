@@ -1,0 +1,42 @@
+Xikishell: Expanding shell commands!
+
+Usage:
+  xsh
+  xsh <shell command>
+  xsh [<options>] <shell command>
+  xsh -<xiki command>
+
+Examples:
+  $ xsh --examples
+
+Interactive help:
+  $ xsh -help
+
+Key shortcuts for your external shell (the default):
+  Ctrl+X    Just open xsh, when empty shell prompt.
+            If you type a shell command first, run it in xsh.
+  Ctrl+G    Grab shell command into xsh, but don't run it.
+  Ctrl+T    Menu of tasks for a shell command or dir.
+            (examples, favorites, etc.)
+  Ctrl+R    External shell history (like Ctrl+R)
+  Esc+Tab   Xiki command items
+
+Options:
+  -g  Grab shell command into xsh
+  -t  Menu of tasks for a shell command or dir
+  -r  Recent shell history, like Ctrl+R (for external shell)
+  -tab  Tab, to auto-complete (not quite finished)
+  -s  Search in files
+  -f  Search filenames
+  -e  Examples
+  -h  History (internal shell commands)
+  -n  Notes
+  -fa Favorites
+  -l  List xsh sessions
+  -o  Open specific file, or list recent files
+  -i  Isolated - Better mode to debug startup problems
+      Doesn't connect to the cached xsh process for faster
+      startup
+  -b  List file bookmarks
+  -a  List all commands
+

@@ -5,19 +5,47 @@ load "#{Xiki.dir}commands/mysql/mysql_index.rb"
 module Xiki
   Menu::Mysql.def_patterns
 
-  # $$... shell commands (exit and run)...
-
-  Xiki.def(/^\$\$ .+/) do |path, options|
-    path.sub! /^\$\$ /, ''
-    Xsh.exit_and_run path
-    ""
-  end
-
-  # $... or %... shell commands (when not under dir)...
+  # $... or %... shell commands...
 
   Xiki.def(/^([$%&])( |$| ?\/)/) do |path, options|
+
+    if options[:dir] =~ /^\/\w+@/
+      next Remote.expand options[:dir], options.merge(:command=>path)
+    end
+
+    # ~ task ancestor above this prompt, so collapse up to it and run...
+
+    if (ancestors = options[:ancestors]) && (last = Path.split ancestors[-1]) && (last.find{|o| o =~ /^~ /})
+
+      # Grab this line, then collapse up to before the tasks
+      command = Line.without_label
+
+      Tree.to_parent
+      Tree.collapse
+
+      # Delete up until and including ~... level
+      Launcher.delete_task_siblings
+
+      line = Line.without_label
+
+      # Line is $..., so replace it
+      if line =~ /^\$( | ?$)/
+        Line.sub! /( *).*/, "\\1#{command}"
+      else
+        # Line not $..., so insert $... underneath
+        Line.sub! /( *).*/, "\\0\n\\1  #{command}"
+        Line.next
+      end
+
+      next Launcher.launch
+
+    end
+
+    # Normal parent root, so put command under it...
+
     prompt = path[/^[$%&]/]
     command = path[/^..(.+)/, 1]
+
     if command
       command.sub! /^\//, ''
       command = Path.split command
@@ -32,7 +60,7 @@ module Xiki
 
   Xiki.def(%r"^(https?://[^/]|file://)") do |path, options|
 
-    if options[:dropdown] == []
+    if options[:task] == []
       next "
         ~ source/
         ~ browser/
@@ -49,7 +77,7 @@ module Xiki
     url = path[/(http|file).?:\/\/.+/]
 
     # Make this look for "~ source/" in path?
-    if prefix == "all" || options[:dropdown] == ["source"]
+    if prefix == "all" || options[:task] == ["source"]
       gem 'httparty'; Kernel.require 'httparty'
       txt = HTTParty.get(url).body
 
@@ -59,7 +87,8 @@ module Xiki
     end
     url.gsub! '%', '%25'
     url.gsub! '"', '%22'
-    prefix == :u ? $el.browse_url(url) : Firefox.url(url)
+
+    Browser.url url
 
     "<!"
   end
@@ -142,16 +171,17 @@ module Xiki
     ""
   end
 
-  # Various lines that mean run as ruby
-  # p ...
-  # puts ...
-  # etc.
+  # Ol "foo"...
   Xiki.def(/^(a |Ol[ \[])/) do |line|
     line.sub! /^a /, "Ol.a "
     CodeTree.run line, :quote=>1
     "=flash/"
   end
 
+  # Various lines that mean run as ruby
+  # p ...
+  # puts ...
+  # etc.
   Xiki.def(/^(p|pp|print|puts) /) do |line|
     # Don't quote temporarily, for presentation
     CodeTree.run line#, :quote=>1
@@ -243,7 +273,7 @@ module Xiki
   #   Xiki["css/list/#{path}"]
   # end
 
-  # Foo.bar...
+  # Foo.bar, so invoke method on class...
   Xiki.def(%r'\AX[" ]|\A[A-Z][:A-Za-z]+\.[a-z]') do |path, options|
 
     # Eval comment inline
@@ -283,9 +313,13 @@ module Xiki
     nil
   end
 
+  # foo+bar ? ...
+
   Xiki.def(/^[a-z]+\+[a-z.+]*.?(\/|$)/) do |path, options|
     Keys.expand_plus_syntax Path.split(path), options
   end
+
+  # foo.com...
 
   Xiki.def(/\A[.a-z]+\.(org|com|edu|net|co|cc|in|de|loc)(:\d+)?(\/|\z)/) do |path, options|
     options.delete :no_slash
@@ -296,8 +330,10 @@ module Xiki
     Xiki.expand "xiki://#{path}"
   end
 
+  # foo@bar.com remote path...
+
   Xiki.def(/^\/\w+@/) do |path, options|
-    Xiki::Remote.expand path, options
+    Remote.expand path, options
   end
 
   # ^ (by itself), so list all notes...
@@ -305,11 +341,6 @@ module Xiki
   Xiki.def(/^\^$/) do |path, options|
     txt = Xiki.expand "notes"
     txt.gsub(/^\+ /, "<< ^")
-  end
-
-  Xiki.def(/^~$/) do |path, options|
-    Line.sub! /$/, "/"
-    Launcher.launch
   end
 
   Xiki.def(/\A\+\w[\w ]+(\z|\/)/) do |path, options|
@@ -321,7 +352,7 @@ module Xiki
   Xiki.def(/\A\^([\w -]+)/) do |path, options|
     name = options[:expanders].find{|o| o[:match]}[:match][1]
     options.delete :no_slash if options[:path] !~ /\//
-    Xiki.expand options[:path].sub(/^\^/, "notes/"), options.select{|key, value| [:prefix, :dropdown].include?(key)}
+    Xiki.expand options[:path].sub(/^\^/, "notes/"), options.select{|key, value| [:prefix, :task].include?(key)}
   end
 
   # @ (by itself)...
@@ -350,42 +381,7 @@ module Xiki
 
     Launcher.append_log path
 
-    Xiki.expand "twilio/#{path}", options.select{|k, v| [:dropdown].include?(k) }
-  end
-
-  # @foo, so treat as tweet...
-
-  Xiki.def(/\A@\w.*/) do |path, options|
-
-    # @foo message, so send message as tweet...
-
-    if path =~ / .+/
-      path.gsub!(/([^a-z0-9_-])/i){ "\\#{$1}" }
-      txt = "t update #{path}"
-      result = Shell.sync txt
-      next result if result =~ /^> error/
-
-      next "<! Tweet sent!"
-    end
-
-    "
-      - email/
-        > Subject
-        | Here's an email address
-      - text message/
-      - call/
-      - tweets/
-        - twitter/
-          - tweet to/
-          - dm/
-          - profile/
-            ! t whois keithtom
-      | Misc notes can go here.
-      | Expanding just saves them.
-      | user@example.com
-      | @twittername
-      | 523-288-2013
-    "
+    Xiki.expand "twilio/#{path}", options.select{|k, v| [:task].include?(k) }
   end
 
   # email@address.com, so delegate to =mail...
@@ -395,9 +391,9 @@ module Xiki
 
     path = Path.split options[:path]   # => ["craig.muth@gmail.com", "The body of\nthe email.\n"]
 
-    # Dropdown...
+    # Tasks...
 
-    if dropdown = options[:dropdown]
+    if task = options[:task]
 
       # No items, so list templates...
 
@@ -405,12 +401,12 @@ module Xiki
       array = txt.scan(/^> (.+?)\n([^>]+)/m).flatten
       emails = Hash[*array]
 
-      if dropdown == []
+      if task == []
         # next txt.scan(/^> (.+)/).map{|o| "~ #{o[0]}/\n"}.join
         next emails.keys.map{|o| "~ #{o}/\n"}.join
       end
 
-      txt = emails[dropdown[0]]
+      txt = emails[task[0]]
       txt.gsub! /^/, "| "
       txt.sub! /\| - subject: /, "> "
       next txt
@@ -447,28 +443,21 @@ module Xiki
 
     # right-clicked root, so show "memorize" option...
 
-    next "~ memorize\n~ save to Memorize.com" if options[:dropdown] == []
+    next "~ memorize\n~ save to Memorize.com" if options[:task] == []
     Kernel.require "#{Xiki.dir}commands/memorize"
-    next Memorize.dropdown_memorize if options[:dropdown] == ["memorize"]
-    next Memorize.dropdown_save_to_memorize if options[:dropdown] == ["save to Memorize.com"]
+    next Memorize.tasks_memorize if options[:task] == ["memorize"]
+    next Memorize.tasks_save_to_memorize if options[:task] == ["save to Memorize.com"]
 
     nil
   end
 
-  # .foo > call menu declared in same file...
-
-  Xiki.def(%r"^\.(\w+|)(\/|$)") do |path, options|   # "
-    # next Xiki["css/list/"].gsub(/^\+/, "<<") if path == "."
-    Launcher.launch_local path, options
-  end
-
   # :-... or :+..., so save as before and after...
 
-  Xiki.def(%r"^:[+-]") do |path, options|
+  Xiki.def(%r"^:[?+-]") do |path, options|
 
     txt = Tree.siblings :quotes=>":", :string=>1
-    before = txt.scan(/^-.+/).join("\n").gsub(/^-/, '')
-    after = txt.scan(/^\+.+/).join("\n").gsub(/^\+/, '')
+    before = txt.scan(/^[?-].+/).join("\n").gsub(/^./, '')
+    after = txt.scan(/^\+.+/).join("\n").gsub(/^./, '')
     Clipboard.register("1", before)
     Clipboard.register("2", after)
 
@@ -480,6 +469,30 @@ module Xiki
   Xiki.def(%r"^:[a-z]+(/|$)") do |path, options|
     # Note that this only runs if FileHandler doesn't handle it already
     "<! Bookmark doesn't exist"
+  end
+
+  # .. or ..., etc, so replace with absolute dir, n-1 higher...
+
+  Xiki.def(/^\.\.+$/) do |path, options|
+    dir = View.dir
+
+    # Chop off one dir for each dot (minus 1)
+    (path.length-1).times do
+      dir.sub! /\/[^\/]+$/, ''
+    end
+
+    "<<< #{dir}"
+  end
+
+
+  # %foo/, so filter output for pattern...
+
+  Xiki.def(/^%[^ \n]/) do |path, options|
+
+    path = path[/\A%(.+)\//, 1]
+
+    txt = Xiki.expand "f/#{path}", options.select{|k, v| [:task, :ancestors].include?(k) }
+    txt
   end
 
 end

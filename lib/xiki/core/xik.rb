@@ -147,22 +147,24 @@ module Xiki
       return current if ! path
 
       return nil if ! @txt
-      result = Tree.children @txt, path
+
+      result = Tree.children @txt, path, options
       if result
         result.strip!
       end
 
       # MenuHandler.eval_exclamations result, options if options
-      if eval_options = options[:eval]
+      if result && eval_options = options[:eval]
 
         # :eval means to eval the exclamations.
-        # We're setting :nest=>1 (in the main options, which is the expected value) in case it's this Xiki is used for a dropdown menu
+        # We're setting :nest=>1 (in the main options, which is the expected value) in case it's this Xiki is used for a tasks menu
         #   - Is this the best place to do that?
         #   - Does it make sense to only do it when :eval?
 
         eval_options[:nest] = 1 if eval_options.is_a?(Hash) && result !~ /^ *! /
 
         MenuHandler.eval_exclamations result, options
+        # Todo > clear out :nest option if eval returned nil?
       end
 
       result
@@ -192,6 +194,11 @@ module Xiki
 
     def =~ regex
       current =~ regex
+    end
+
+    def << txt
+      @txt = @txt.join("\n") + txt
+      @txt = @txt.split("\n", -1)
     end
 
     def at_bottom?

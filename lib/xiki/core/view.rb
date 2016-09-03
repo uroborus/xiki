@@ -165,17 +165,24 @@ module Xiki
 
     # Creates a new window by splitting the current one
     def self.create_vertical
-      Xsh.use_default_theme_maybe
       $el.split_window_horizontally
-      View.next if ! Keys.prefix_u
+
+      if Keys.prefix_u
+        # Make hidden view appear at left
+        ControlTab.go
+        return View.next
+      end
+
+      # Make hidden view appear at right
+      View.next
+      ControlTab.go
+
     end
 
     def self.create prefix=nil
       prefix ||= Keys.prefix
 
       # Xsh and first time we've split, so change theme to default...
-
-      Xsh.use_default_theme_maybe
 
       if prefix == :u
         $el.split_window_vertically
@@ -187,10 +194,12 @@ module Xiki
       else   # Normal split
         $el.split_window_vertically
         View.next
+        ControlTab.go
       end
     end
 
     def self.show_txt txt, options={}
+
       View.to_buffer(options[:name] || "message")
       View.kill_all
       Notes.mode
@@ -219,14 +228,14 @@ module Xiki
 
       path, options = nil, path if path.is_a?(Hash)
 
-      return self.show_txt(options[:txt], options.merge(:name=>path)) if options[:txt]
+      return self.show_txt(options[:txt], {:name=>path}.merge(options)) if options[:txt]
 
       # Pull off line number if there
       path = path.sub(/(.+?:\d+).*/, "\\1")
       line_number = path.slice!(/:\d+$/)
 
       # Open after bar if in bar
-      if View.in_bar? && (! options[:stay_in_bar]) && path != "$0" && path != Bookmarks[':t'] && path != Bookmarks[':f']
+      if View.in_bar? && (! options[:stay_in_bar]) && path != "$0" && path != Bookmarks[':t'] && path != Bookmarks[':n']
         View.to_after_bar
       end
 
@@ -243,14 +252,12 @@ module Xiki
       if options[:other_view] && ! View.file_visible?(expanded) && View.windows_in_my_column.length > 1
         # If we're at the top, go to next
         Keys.clear_prefix
-
         View.windows_in_my_column.index(View.current) == 0 ?
           View.next : View.previous
         # Else go to previous
         # possibly move to a window...
         # Do nothing if already visible
       end
-
 
       if expanded
         if options[:same_view]
@@ -270,7 +277,7 @@ module Xiki
 
           if File.directory? expanded   # If a dir, open it in new buffer
             expanded = FileTree.add_slash_maybe expanded
-            return Launcher.open expanded, options.merge(:buffer_name=>View.unique_name("ls"), :buffer_dir=>expanded)
+            return Launcher.open expanded, options.merge(:buffer_name=>"#{expanded[/([^\/]*)\/$/]}", :buffer_dir=>expanded)
           end
 
           $el.find_file expanded
@@ -295,7 +302,9 @@ module Xiki
       if line_number
         View.to_line line_number[/\d+/]
       end
-      View.message ""   # To keep "Loading..." from flashing at the bottom
+
+      # Can't do this, because it suppresses output of run+eval
+      #View.message ""   # To keep "Loading..." from flashing at the bottom
 
       nil
     end
@@ -446,8 +455,7 @@ module Xiki
       $el.delete_other_windows
 
       # Width of bar (layout+todo etc.)
-      $el.split_window_horizontally 48
-      #     $el.split_window_horizontally 28
+      $el.split_window_horizontally
 
       $el.other_window 1
       o = nil
@@ -485,9 +493,9 @@ module Xiki
     end
 
     # Accounts for bar
-    def self.balance
+    def self.balance options={}
       $el.balance_windows
-      return if Keys.prefix_u
+      return if ! Keys.prefix_u && ! options[:narrow_bar]
       if self.bar?
         buffer = $el.selected_window
         $el.select_window $el.frame_first_window
@@ -505,14 +513,22 @@ module Xiki
       $el.point_min != 1 || $el.point_max != $el.buffer_size+1
     end
 
-    def self.hide
+    def self.hide options={}
+
+      size = View.list.size
+
+      # It's the only window, so kill the view
+      if size == 1
+        View.kill if options[:kill_if_only]
+        return
+      end
+
       Keys.prefix_times.times do
         left = View.left_edge
 
         # If there's one above me and before me
         index = View.index
         middle = false
-        size = View.list.size
         if index > 0 && index < (size - 1)   # Check existance
           if( left == View.left_edge(View.list[index - 1]) &&
             left == View.left_edge(View.list[index + 1]) )  # Check alignment
@@ -927,16 +943,18 @@ module Xiki
       result
     end
 
-    def self.dir= to
-      $el.elvar.default_directory = File.expand_path(to)+"/"
+    def self.dir= dir
+      dir = File.expand_path dir
+      dir << "/" if dir != "/"
+      $el.elvar.default_directory = dir
     end
 
     # Returns path to current file if saved.
     # If file not saved or file is a buffer, it writes it to a temp file and returns that path.
     #
-    # View.file_or_temp_file :buffer=>"tasks.notes"
-    # View.file_or_temp_file :file=>":t"
-    def self.file_or_temp_file options={}
+    # View.as_file_or_temp_file :buffer=>"todo.notes"
+    # View.as_file_or_temp_file :file=>":t"
+    def self.as_file_or_temp_file options={}
 
       buffer = options[:buffer]
 
@@ -1015,8 +1033,8 @@ module Xiki
     end
 
     # Returns whether a buffer is open / exists
-    # View.buffer_open? "tasks.notes"
-    #   #<buffer tasks.notes>
+    # View.buffer_open? "todo.notes"
+    #   #<buffer todo.notes>
     def self.buffer_open? name
       $el.get_buffer(name) ? true : nil
     end
@@ -1036,13 +1054,6 @@ module Xiki
       $el.elvar.truncate_lines = on_or_off.to_sym == :off
     end
 
-    # Call this at startup to set some sensible view-related default behavior
-    def self.sensible_defaults
-      $el.el4r_lisp_eval("(progn (setq truncate-partial-width-windows nil)
-        (set 'default-truncate-lines t)
-        )")
-    end
-
     def self.set_mark pos=nil
       pos ||= self.cursor
       $el.set_mark pos
@@ -1050,6 +1061,10 @@ module Xiki
 
     def self.mark= pos=nil
       self.set_mark pos
+    end
+
+    def self.select
+      self.set_mark
     end
 
     def self.insert txt, options={}
@@ -1257,11 +1272,11 @@ module Xiki
     end
 
     def self.char
-      $el.buffer_substring($el.point, $el.point+1)
+      $el.buffer_substring($el.point, $el.point+1) rescue nil
     end
 
     def self.char_before
-      $el.buffer_substring($el.point-1, $el.point)
+      $el.buffer_substring($el.point-1, $el.point) rescue nil
     end
 
 
@@ -1454,6 +1469,8 @@ module Xiki
 
     def self.insert_line
       orig_indent = Line.indent
+      cursor = View.cursor
+      char, char_before = View.char, View.char_before
       prefix = Keys.prefix :clear=>1   # Check for numeric prefix
 
       if prefix == 0
@@ -1467,10 +1484,8 @@ module Xiki
         if prefix == :u || prefix == :-   # Use prefix chars from previous line
           ""
         else
-          line[/^[ |#:!%*+-]*/]
+          line[/^[ |#;:!%$*^+-]*/]
         end
-
-      Deletes.delete_whitespace if ! Line.at_left? && ! Line.at_right?
 
       # If C--, move to end of previous line, so it goes before
       if prefix == :-
@@ -1485,6 +1500,12 @@ module Xiki
 
       times = prefix.is_a?(Fixnum) ? prefix : 1
       times.times{ View.insert "\n#{indent_txt}" }
+
+      if char != "\n"
+        View.cursor = cursor
+      end
+      nil
+
     end
 
     def self.shift
@@ -1537,16 +1558,47 @@ module Xiki
 
     end
 
-    def self.layout_todo options={}
-      prefix = Keys.prefix :clear=>1
+
+
+    def self.layout_todo
+
+      # There's no bar yet and in todo.notes, so switch to next (avoid showing :t in both views)
+      if View.file == Bookmarks[":t"] && ! View.bar?
+        View.to_buffer Buffers.names_array.find{|o| ! ["todo.notes"].member? o}
+      end
+
+      View.bar
+      View.open ":t", :stay_in_bar=>1
+    end
+
+    def self.layout_todo_and_nav options={}
+
       FileTree.open_in_bar
+
+      # Switch to one that's not :t or :n
+      View.to_nth 2
+      View.to_buffer Buffers.names_array.find{|o| ! ["todo.notes", "nav.notes", "*ol"].member? o}
+      View.to_nth 0
+
       Effects.blink(:what=>:line) unless options[:no_blink]
     end
 
-    def self.layout_files options={}
-      FileTree.open_in_bar
-      View.to_nth 1
-      Effects.blink(:what=>:line) unless options[:no_blink]
+    def self.layout_nav
+
+      # There's no bar yet and in nav.notes, so switch to next (avoid showing :t in both views)
+      ControlTab.go if View.file == Bookmarks[":n"] && ! View.bar?
+
+      View.bar
+      View.open ":n", :stay_in_bar=>1
+    end
+
+    def self.layout_quick
+
+      # There's no bar yet and in nav.notes, so switch to next (avoid showing :t in both views)
+      View.to_buffer Buffers.names_array.find{|o| ! ["todo.notes", "nav.notes", "*ol", "quick.notes"].member? o}
+
+      View.bar
+      View.open ":q", :stay_in_bar=>1
     end
 
     def self.layout_outlog options={}
@@ -1561,8 +1613,11 @@ module Xiki
 
       # If already showing, just go to it
 
-      if ! View.buffer_visible?("*ol")
-        View.layout_files if ! View.bar?   # If not already showing bar, do it first, so it shows up on left
+      if options[:all]
+        View.layout_todo_and_nav
+
+        View.to_nth 1
+        View.create
       end
 
       # If we were on an Ol line, jump to it later...
@@ -1589,7 +1644,6 @@ module Xiki
         Launcher.launch
         return
       end
-
 
       if found
         if found >= (Line.number(View.bottom) - 1)   # If too far back to be shown
@@ -1664,7 +1718,7 @@ module Xiki
       prefix = Keys.prefix :clear=>true
       orig = Location.new
 
-      View.layout_todo :no_blink=>true
+      View.open ":t"
       todo_orig = Location.new
       View.to_highest
 
@@ -1675,13 +1729,13 @@ module Xiki
         lines_to_delete = 1
         Line.delete
 
-        in_tasks = Bookmarks[':t'] == orig.file
-        orig.line -= 1 if in_tasks   # If in :t, adjust position by how much is deleted
+        in_todo = Bookmarks[':t'] == orig.file
+        orig.line -= 1 if in_todo   # If in :t, adjust position by how much is deleted
 
         # If blank line after, delete it
         if Line.blank?
           Line.delete
-          orig.line -= 1 if in_tasks   # If in :t, adjust position by how much is deleted
+          orig.line -= 1 if in_todo   # If in :t, adjust position by how much is deleted
         end
       end
 
@@ -1911,8 +1965,8 @@ module Xiki
     end
 
     # View.unique_name "hi"
-    # View.unique_name "tasks.notes"
-    #   tasks2.notes
+    # View.unique_name "todo.notes"
+    #   todo2.notes
     def self.unique_name name
       return name if ! self.buffer_open? name
       i, limit = 2, 1000
@@ -2085,7 +2139,9 @@ module Xiki
     end
 
     def self.zoom
-      if Keys.prefix_u
+
+      # If something hidden, just show
+      if $el.point_min != 1 || $el.point_max != 1 + $el.buffer_size
         return Hide.reveal
       end
 
@@ -2103,12 +2159,19 @@ module Xiki
       percent = (percent * 100).round
     end
 
-    def self.suggest_filename
-      txt = View.txt
+    def self.extract_suggested_filename_from_txt txt=nil
+      txt ||= View.txt
 
-      return if txt.scan(/^[^ \n].*/) == ["sessions/"]   # Don't store session if only command is sessions/...
+      # Remove text that appears when Ctrl+R
+      txt.sub! /\A\| Type Ctrl\+G .+\n\n/, ''
 
-      name = txt[/[a-z][a-z.0-9 ']*/i]   # '
+      # Don't store session if only command is sessions/...
+      return if txt.scan(/^[^ \n].*/) == ["sessions/"]
+
+      # Change some chars, to dashes
+      txt.gsub!(/ > /, ' - ')
+
+      name = txt[/[a-z][a-z.0-9 '-]*/i]   # '
 
       return if ! name   # Do nothing if no words in the file
 
@@ -2120,11 +2183,31 @@ module Xiki
     end
 
     def self.tab_width width
-      $el.elvar.tab_width width
+      $el.elvar.tab_width = width
     end
 
     def self.scan regex
       self.txt.scan regex
+    end
+
+    def self.close
+      self.kill
+      self.hide
+    end
+
+    def self.insert_shell_prompt
+
+      # up+, so prompt for bookmark...
+
+      if Keys.prefix_u
+        dir = Keys.bookmark_as_path :prompt=>"Bookmark to make shell prompt in: "
+        View.<< Bookmarks[dir], :dont_move=>1
+      end
+
+      # Insert "$ " under this dir...
+
+      Tree.<< "$ ", :no_search=>1, :no_slash=>1
+      Line.to_right
     end
 
   end

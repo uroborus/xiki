@@ -74,7 +74,7 @@ module Xiki
           View.open paths[0]
         end
 
-        View.to_buffer("*tree of current")
+        View.to_buffer("outline/")
         View.clear;  Notes.mode
 
         raise "Thought this wouldn't happen :(" if paths.length > 1
@@ -98,7 +98,7 @@ module Xiki
 
     def self.open_history
       times = self.prefix_times
-      View.to_buffer("*tree of history")
+      View.to_buffer("history/")
       View.clear;  notes_mode
 
       self.insert_history times
@@ -213,10 +213,33 @@ module Xiki
     def self.list
       regex = Regexp.quote View.name
       current_file = View.file.sub(/.+\//, "\\0\n  + ")
-      Launcher.open "#{current_file}\n:x/misc/versions/\n  - ***^#{regex}\./"
+      Launcher.open "#{current_file}\n:x/misc/versions/\n  - **^#{regex}\./"
 
       "to-does"
     end
 
+    def self.init_in_client
+
+      $el.el4r_lisp_eval %`
+        (progn
+          (defun xiki-history-find-file-handler ()
+            (el4r-ruby-eval "Xiki::History.log")
+          )
+          (add-hook 'find-file-hook 'xiki-history-find-file-handler)
+        )
+      `
+
+    end
+
+    def self.log
+
+      tmp_dir = File.expand_path "~/xiki/misc/logs"
+      FileUtils.mkdir_p tmp_dir   # Make sure dir exists
+      file = "#{tmp_dir}/opened_files_log.notes"
+      File.open(file, "a") { |f| f << "#{View.file}\n" }
+
+    end
+
   end
+
 end

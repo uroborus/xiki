@@ -4,7 +4,7 @@ dir = File.expand_path '~/xiki/bookmarks'
 
 if args == []
 
-  names = Dir.entries(dir).select{|o| o !~ /^\./}.sort_by{ |x| File.stat("#{dir}/#{x}").mtime }.reverse
+  names = Dir.entries(dir).select{|o| o !~ /^\./}.sort_by{ |x| File.stat("#{dir}/#{x}").mtime }.reverse rescue []
 
   names.map! do |o|
     name = o.sub(/\..+/, '').gsub('_', ' ')
@@ -22,10 +22,16 @@ end
 
 # ~, so show or run ~ navigate item...
 
-return "~ navigate" if options[:dropdown] == []
+file_path = args[1] ? args[1].sub(/^: /, '') : nil
 
-if options[:dropdown] == ["navigate"]
-  file = Bookmarks[":hx/bookmarks/#{args[0]}.notes"]
+if options[:task] == []
+  txt = "~ source\n~ delete bookmark\n~ move to top"
+  txt << "\n~ exit and cd" if file_path && File.directory?(file_path)
+  return txt
+end
+
+if options[:task] == ["source"]
+  file = Bookmarks[":xh/bookmarks/#{args[0]}.notes"]
 
   if ! File.exists? file
     options[:no_slash] = 1
@@ -39,6 +45,22 @@ if options[:dropdown] == ["navigate"]
 
   View.open file
   return nil
+
+elsif options[:task] == ["exit and cd"]
+  dir = Bookmarks[file_path]
+  Shell.exit_and_cd dir
+  return nil
+
+elsif options[:task] == ["delete bookmark"]
+  file = Bookmarks[":xh/bookmarks/#{args[0]}.notes"]
+  FileUtils.rm file
+  return "<! deleted"
+
+elsif options[:task] == ["move to top"]
+  file = Bookmarks[":xh/bookmarks/#{args[0]}.notes"]
+  FileUtils.touch file
+  return "<! will be at top"
+
 end
 
 # /foo, so jump to bookmark...

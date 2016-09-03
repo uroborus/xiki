@@ -9,7 +9,7 @@ module Xiki
       "*ol",
       ]
 
-    @@log = File.expand_path("~/xiki/misc/logs/command_log.notes")
+    @@log = File.expand_path("~/xiki/misc/logs/xiki_commands_log.notes")
 
     # Use @launcher/options/show or launch/ to enable.
 
@@ -40,7 +40,7 @@ module Xiki
       - docs/
         > Summary
         | Launcher is the class that handles "launching" things (double-clicking
-        | on a line, or typing Ctrl-enter).
+        | on a line, or typing Ctrl+X).
       - api/
         > Open menu in new buffer
         @ Launcher.open "computer"
@@ -188,7 +188,7 @@ module Xiki
 
     # Collapses and re-runs line in current view, or in :t (sometimes jumping to the nth labeled line).
     def self.do_last_launch options={}
-      # Ol "options", options
+
       prefix = options[:prefix] || Keys.prefix(:clear=>true)
 
       # Clear out time of last log, so it always shows heading
@@ -244,7 +244,8 @@ module Xiki
           # Find "- foo) bar", "- ) foo", or "- )\nbar"
           label = Emacs.regexp_quote options[:label]
           Search.forward "^ *[+-] \\(#{label})\\|) #{label}/?$\\|)\n[^a-zA-Z_]*#{label}/?$\\)", :beginning=>1
-          Line.next if Line =~ /^ *[+-] [\w .+']*\)$/   # Next line if this is just a label > label regex
+
+          Notes.next_line_when_paren_label
         end
 
         return if options[:navigate]
@@ -278,12 +279,12 @@ module Xiki
 
       Tree.to_parent if Line =~ /^ +- backtrace:$/   # If we went to "- backtrace:", go up again
 
+      if options[:dont_launch]
+        Line.to_beginning
+        return
+      end
 
-      # Ol "options[:dont_launch]", options[:dont_launch]
-      return if options[:dont_launch]
-      # Ol()
-
-      Tree.kill_under
+      Tree.collapse
 
       Effects.blink
 
@@ -312,20 +313,14 @@ module Xiki
 
       View.line, View.column = line, column if line
 
-      # Don't go to orig if :f > and we already went to a file...
+      # Don't go to orig if :n > and we already went to a file...
 
-      return if options[:bookmark] == ":f" && View.file != Bookmarks[":f"]
+      return if options[:bookmark] == ":n" && View.file != Bookmarks[":n"]
 
       View.to_nth orig
 
       # do+expand, so reflect value in comment, if line is "Ol foo" or "ol[foo]"
       View.layout_outlog(:prefix=>:-) if prefix == :u && Line =~ /^ *Ol( |!|\.>>)/
-    end
-
-    # Used any more? - should be replaced by menu log - delete this
-    def self.urls
-      txt = File.read File.expand_path("~/xiki/misc/logs/url_log.notes")
-      txt = txt.split("\n").reverse.uniq.join("\n")
     end
 
     def self.enter_last_launched
@@ -346,7 +341,7 @@ module Xiki
         elsif bm == ";" || bm == ":" || bm == "-"   # What does this mean?
           "nav history/:/"
         else
-          "nav history/$#{bm}/"
+          "nav history/:#{bm}/"
         end
     end
 
@@ -612,8 +607,8 @@ Ol["oh, this path is an array: #{path}!"] if path.is_a?(Array)
         return
       end
 
-      # Deprecated
-      return Launcher.go if options[:unified]
+      options.merge! :launcher_open=>1
+
       Launcher.launch options
     end
 
@@ -701,7 +696,7 @@ Ol["oh, this path is an array: #{path}!"] if path.is_a?(Array)
         View.flash message
         path = Keys.input "#{message}: ", :timed=>1
 
-        path = Bookmarks["$#{path}"] if path =~/^\w/   # They typed a word, so expand it as a bookmark
+        path = Bookmarks[":#{path}"] if path =~/^\w/   # They typed a word, so expand it as a bookmark
 
         View.insert path
 
@@ -709,7 +704,7 @@ Ol["oh, this path is an array: #{path}!"] if path.is_a?(Array)
 
       # If there's a numeric prefix, add it
 
-      Launcher.launch :dropdown=>["outline"]
+      Launcher.launch :task=>["outline"]
     end
 
 
@@ -733,7 +728,7 @@ Ol["oh, this path is an array: #{path}!"] if path.is_a?(Array)
       # If no prefixes and children exist, collapse
       if ! Keys.prefix && ! Line.blank? && Tree.children? && View.name != "*ol"
         Tree.minus_to_plus
-        Tree.kill_under
+        Tree.collapse
         return
       end
 
@@ -774,9 +769,9 @@ Ol["oh, this path is an array: #{path}!"] if path.is_a?(Array)
 
       if prefix = Keys.prefix; options[:prefix] = prefix; end
 
-      # Launching a "* dropdown" item, so delete the siblings (the'll be added back later)...
+      # Launching a "~ task" item, so delete the siblings (the'll be added back later)...
 
-      dropdown_orig = self.delete_dropdown_siblings path
+      task_orig = self.delete_task_siblings path
 
       # Maybe nest these within new :limits option (and delete before
       # passing to menu) to avoid too many options passed into menus.
@@ -797,11 +792,20 @@ Ol["oh, this path is an array: #{path}!"] if path.is_a?(Array)
 
       self.adjust_line_number_maybe path, options
 
-      if options[:path_append]   # Append item to path (used for :dropdown)
+      if options[:path_append]   # Append item to path (used for :task)
         path[-1] << "/" if path[-1] =~ /[^\/]$/   # Append slash if content that doesn't end in slash
         path[-1] << options[:path_append]
       end
 
+      # A +foo inline command maybe found in the above text in this file, so use it...
+
+      if path[-1] =~ /\A[a-z0-9 ]+(\/|\z)/i
+        root = path[-1][/[a-z0-9 ]+/i]
+        inline_command = self.extract_command root
+        options[:command_text] = inline_command
+        # Don't delegate to inline command if $...
+        # options[:command_text] = inline_command if path[-1] !~ /^\$/
+      end
 
       # Expand command...
 
@@ -812,17 +816,17 @@ Ol["oh, this path is an array: #{path}!"] if path.is_a?(Array)
       txt = self.expand_again_if_beg txt, options
       txt = txt.to_s if txt != nil && ! txt.is_a?(String)
 
-      # Pull out certain options set by implementation, meant to control how it's inserted...
+      # Propagate certain options set by implementation, meant to control how it's inserted...
 
-      options.each{|k, v| insert_options[k] = v if [:no_slash, :no_search, :line_found, :letter, :omit_slashes].include?(k)}
+      Options.propagate_some options, insert_options
 
-      # Re-add dropdown items and restore cursor if requested to put output under dropdown...
+      # Re-add task items and restore cursor if requested to put output under task...
 
-      if options[:dropdown] && options[:nest] && dropdown_orig
-        # Keep using letters if under dropdown
-        insert_options[:letter] = 1 if ! options[:no_dropdown]
+      if options[:task] && options[:nest] && task_orig
+        # Keep using letters if under task
+        insert_options[:hotkey] = 1 if ! options[:no_task]
         Line.next
-        View << dropdown_orig
+        View << task_orig
         View.line = line_number
       end
 
@@ -832,9 +836,16 @@ Ol["oh, this path is an array: #{path}!"] if path.is_a?(Array)
 
       insert_options[:no_slash] = 1 if options[:args] && options[:args].last =~ /(^[>|:]|\n)/
 
+      # "~ foo" task item, so don't insert slashes after, and use hotkey search
+
       if txt =~ /\A\s*~ /
-        insert_options[:no_slash] = 1
-        insert_options[:letter] = 1
+
+        # Suppress adding slash if doing a task on a quote
+        insert_options[:no_slash] = 1 if options[:quote]
+        # Suppress adding slash, unless on a file path (it will only add if it's actually a dir, which we want)
+        insert_options[:no_slash] = 1 if ! options[:file_path]
+
+        insert_options[:hotkey] = 1
       end
 
       return if self.process_bullets_in_output txt, options, insert_options
@@ -846,7 +857,8 @@ Ol["oh, this path is an array: #{path}!"] if path.is_a?(Array)
 
       self.process_bullets_after line, txt, insert_options   # Delete stuff if bullet was <~ or <+!
 
-      Tree.plus_to_minus unless insert_options[:leave_bullet]   # There was output, so change + to -
+      # There was output, so change + to -
+      Tree.plus_to_minus unless insert_options[:leave_bullet] || insert_options[:task]
 
       Tree.<< txt, insert_options
       nil
@@ -902,6 +914,24 @@ Ol["oh, this path is an array: #{path}!"] if path.is_a?(Array)
       Expander.expand options
     end
 
+
+
+    # This might not be used any more > after making $... handle themselves
+
+    def self.collapse_items_up_to_dollar txt
+      Tree.to_parent
+
+      line = Line.value
+      while(line =~ /^\s/ && line !~ /^ *\$/) do
+        Tree.to_parent
+        line = Line.value
+      end
+
+      Tree.collapse :no_plus=>1
+      Line.sub! /( *).*/, "\\1#{txt}"
+      nil
+    end
+
     # Called by .launch to do appriate thing if output starts with
     # =replace/, =open file/, =flash/, <!..., <<<..., or something else that
     # instructs the editor to take an action.
@@ -909,31 +939,21 @@ Ol["oh, this path is an array: #{path}!"] if path.is_a?(Array)
 
       # <$$ foo, so exit and run the command (if in shell console)...
 
-      if txt.strip =~ /\A<\$\$ (.+)\z/
-        command = $1
+      if txt =~ /\A<\$\$ /
+        command = txt.sub /\A<\$\$ /, ''
         return View.<<("Don't know how to handle $$... when not run from shell.") if Environment.gui_emacs
-        $el.suspend_emacs command
+        DiffLog.quit_and_run command
         return true
       end
 
       # <$ foo, so move output up to $... line and replaces it...
+      # This might not be used any more > after making $... handle themselves
 
       if txt.strip =~ /\A<\$ (.+)\z/
         txt = $1
 
-        Tree.to_parent
-
-        line = Line.value
-        while(line =~ /^\s/ && line !~ /^ *\$/) do
-          Tree.to_parent
-          line = Line.value
-        end
-
-        Tree.kill_under :no_plus=>1
-        Line.sub! /( *).*/, "\\1#{txt}"
-
+        self.collapse_items_up_to_dollar txt
         Launcher.launch
-
         return true
       end
 
@@ -957,9 +977,9 @@ Ol["oh, this path is an array: #{path}!"] if path.is_a?(Array)
         return true
       end
 
-      # <+ : replace line...
+      # If padding at beginning, and one of these, do .unindent
 
-      # <: : replace siblings...
+      # <: and <+ replace siblings or line...
 
       if txt =~ /\A<([+:])\n/
         arg = $1
@@ -1039,7 +1059,7 @@ Ol["oh, this path is an array: #{path}!"] if path.is_a?(Array)
     end
 
 
-    def self.delete_dropdown_siblings path=nil #, line=nil
+    def self.delete_task_siblings path=nil #, line=nil
 
       line = Line.value
       path ||= Tree.path
@@ -1079,7 +1099,14 @@ Ol["oh, this path is an array: #{path}!"] if path.is_a?(Array)
 
       open_options = options[:prefix] == 0 ? {:same_view=>1} : {}   # 0+ means use same view
 
+
       View.open txt, open_options
+
+
+
+      # Check file prefs > if default editor set
+
+
 
       if line_number
         View.line = line_number
@@ -1136,6 +1163,23 @@ Ol["oh, this path is an array: #{path}!"] if path.is_a?(Array)
     end
 
     def self.insert_menu
+
+      # Text selected, so nest selected text under the command...
+
+      if View.selection?
+
+        # Get bookmark from user
+
+        command = Keys.input "Command to nest this text under: "
+
+        left, right = View.range
+        txt = View.delete left, right
+
+        View.<< "#{command}/\n#{txt.gsub(/^/, "  | ")}", :dont_move=>1
+
+        return
+      end
+
       line = Line.value
       indent = Line.indent line
       blank = Line.blank?
@@ -1164,7 +1208,7 @@ Ol["oh, this path is an array: #{path}!"] if path.is_a?(Array)
       end
 
       if prefix == :u   # Insert @last to see recent menu names and drill in.
-        Line << "$#{Keys.input :timed=>1}//"
+        Line << ":#{Keys.input :timed=>1}//"
         Launcher.go
         return
       end
@@ -1201,8 +1245,10 @@ Ol["oh, this path is an array: #{path}!"] if path.is_a?(Array)
       Notes.mode
       View >> "\n\n\n"
 
-      Keys.timed_insert :prompt=>"Type a command to run!"
-      Launcher.launch
+      View.flash "- Type a command to run!"
+
+      inserted = Keys.timed_insert :prompt=>""
+      Launcher.launch if inserted
 
     end
 
@@ -1216,7 +1262,6 @@ Ol["oh, this path is an array: #{path}!"] if path.is_a?(Array)
       View << "#{prompt}"
       View >> "\n\n\n"
 
-      ControlLock.disable
     end
 
     # Mapped to jump+command.
@@ -1231,41 +1276,41 @@ Ol["oh, this path is an array: #{path}!"] if path.is_a?(Array)
       View >> "\n\n\n"
 
       ControlLock.disable
-
     end
 
-
-    def self.dropdown
-
-      Keys.remember_key_for_repeat ["dropdown"]
-
-      return self.dropdown_on_this_file if Keys.prefix_u(:clear=>1)
-
-      Launcher.launch :dropdown=>[]
+    def self.tasks
+      Keys.remember_key_for_repeat ["task"]
+      self.launch :task=>[]
     end
 
-    def self.dropdown_on_this_file
+    def self.tasks_menu_on_bookmark options={}
 
-      file = View.file   # Get path of this file
+      # file = View.file   # Get path of this file
+      file = Keys.bookmark_as_path options.merge(:include_file=>1)
 
-      file.sub! /.+\//, "\\0\n  - "   # Indent before file
+      return View.message("This view doesn't have a file.") if ! file
+
+      # If not a dir, indent file under
+      if file !~ /\/$/
+        file.sub! /.+\//, "\\0\n  - "   # Indent before file
+      end
 
       View.new_file
       View << file
 
-      Launcher.launch :dropdown=>[]
+      self.launch :task=>[]
 
     end
 
     def self.double_click
-      Launcher.go
+      self.go
     end
 
     def self.right_click options={}
 
       path = Tree.path
 
-      expand_options = {:dropdown=>[]}
+      expand_options = {:task=>[]}
       expand_options[:mouse] = 1 # unless options[:no_mouse]
 
       txt = Xiki.expand path, expand_options
@@ -1274,73 +1319,38 @@ Ol["oh, this path is an array: #{path}!"] if path.is_a?(Array)
       txt_with_stars = txt.dup
       txt.gsub! /~ /, ""
 
-      result = Menu.dropdown txt, :offset=>[23, 21], :cursor=>Line.left+Line.indent.length
+      result = Menu.tasks txt, :offset=>[23, 21], :cursor=>Line.left+Line.indent.length
 
       return if ! result
 
-      Launcher.launch :path_append=>"~ #{result}"
+      self.launch :path_append=>"~ #{result}"
 
     end
 
     # Jumps up to :t and runs first "- )" line.
     def self.do_task options={}
+      if Keys.prefix_u :clear=>1
+        Code.load_this_file
+      end
       Launcher.do_last_launch :nth=>1, :prefix=>:u
     end
 
-    def self.launch_local path, options
-      options.delete :no_slash
+    # Grabs +foo command out of current view, by searching upward for it.
+    def self.extract_command root
 
-      path = path.sub /^\./, '+'   # We want +foo, not .foo
-      root = path[/^[^\/]+/]
+      cursor = View.cursor
+      result = Search.backward "^\\+#{root}/?$"
 
-      "Todo > find in current file > use .file_or_temp_file"
+      return if ! result
 
-      file = View.file_or_temp_file
+      txt = "#{Line.value}\n#{Tree.children_at_cursor(:string=>1)}"
 
-      # Grab +foo definition...
+      View.cursor = cursor
 
-      definition = Launcher.extract_command root, :file=>file
-
-      # Todo > if not found, look for it in :t if not there?
-      # Todo > what if not found at all?
-
-      Tree.children definition, path
+      txt.sub!(/^\+/, '')
 
     end
 
-    # Launcher.extract_command :file=>"/tmp/foo.notes"
-    # Launcher.extract_command :txt=>"+foo\n  bar\n"
-    def self.extract_command command, options
-
-      file, txt = options[:file], options[:txt]
-
-      if txt
-        txt = txt.split("\n")
-        enumerator = txt.each
-
-        # Go through until found at left margin
-
-      elsif file
-        enumerator = IO.foreach(file, *Files.encoding_binary)
-      end
-
-      found, last_was_blank = "", nil
-      enumerator.each do |line|
-        line.sub! /\n/, ''   # When iterating file, includes linebreaks
-        # If not found yet, check for line
-        if found == ""
-          found << "#{line}\n" if line =~ /^#{Regexp.quote command}(\/|$)/
-        else   # Found, so append until line at margin or 2 blank lines
-          break if line =~ /^[^ \n]/
-          break if line == "" && last_was_blank
-          found << "#{line}\n"
-          last_was_blank = true if line == ""
-        end
-      end
-
-      found
-
-    end
   end
 
 end

@@ -4,6 +4,7 @@ require 'xiki/core/styles'
 require 'xiki/core/line'
 require 'xiki/core/view'
 require 'xiki/core/cursor'
+require 'xiki/core/code'
 
 module Xiki
   # Draws a tree from a dir structure and lets you incrementally search in the tree.
@@ -132,7 +133,7 @@ module Xiki
 
       Search.append_log path, "- #{prepend}#{regex}/"
 
-      View.to_buffer "*tree grep"
+      View.to_buffer "tree filter/"
       View.dir = Files.dir_of(path)
       View.clear; Notes.mode
 
@@ -225,7 +226,7 @@ module Xiki
       path.sub!(/\/$/, '')
 
       entries = Dir.glob(["#{path}/*"], File::FNM_DOTMATCH).
-        select{|i| i !~ /\/\.(\.*|svn|git)$/}.entries.sort
+        select{|i| i !~ /\/\.(\.*|svn|git)$/}.entries.sort_by{|w| w.downcase}
 
       entries = entries.select{|o| o !~ /\/(vendor|log)$/}   # Exclude some dirs (why doing it here?
 
@@ -295,231 +296,168 @@ module Xiki
 
       return if ! $el
 
-      if Styles.dark_bg?   # Bullets
+      Code.cache(:file_tree_define_styles) do
+        Styles.define :ls_bullet, :face=>'menlo', :size=>"+2", :fg=>"d70", :bold=>1
 
-        Styles.define :ls_bullet,
-          :face => 'menlo', :size => "+2",  # Mac
-          :fg => "d70", :bold=>1
-                      # :face => 'courier', :size => "+2",  # Mac
-                      # :face => 'monaco', :size => "+2",  # Mac
+        Styles.define :ls_bullet_darker, :face=>'menlo', :size=>"+2", :fg=>"555", :bold=>nil
 
-        Styles.define :ls_bullet_darker,
-          :face => 'menlo', :size => "+2",  # Mac
-          :fg => "444", :bold=>nil
-
-      else
-        Styles.define :ls_bullet_darker,
-          :face=>'menlo', :size=>"+2",  # Mac
-          :fg=>"aaa", :bold=>nil
-        Styles.define :ls_bullet,
-          :face=>'menlo', :size=>"+2",  # Mac
-          :fg=>"f70", :bold=>true
-                      # :face=>'monaco', :size=>"+2",  # Mac
-                      # :face=>'courier', :size=>"+2",  # Mac
-      end
-
-
-      if Styles.dark_bg?
-        Styles.define :quote_heading_h0, :fg=>"fff", :size=>"+8", :face=>"arial", :bold=>true
-        Styles.define :quote_heading_h1, :fg=>"fff", :size=>"2", :face=>"arial", :bold=>true
-        Styles.define :quote_heading_h2, :fg=>"fff", :size=>"-2", :face=>"arial", :bold=>true
+        Styles.define :quote_heading_h0, :size=>"+8", :face=>"arial", :bold=>true
+        Styles.define :quote_heading_h1, :size=>"2", :face=>"arial", :bold=>true
+        Styles.define :quote_heading_h2, :size=>"-2", :face=>"arial", :bold=>true
 
         Styles.define :quote_heading_pipe, :fg=>"555", :size=>"0", :face=>"xiki", :bold=>1 # , :bg=>"unspecified"
 
         Styles.define :quote_light, :fg=>"333", :size=>"0", :face=>"xiki", :bold=>true
 
-        Styles.define :quote_heading_h1_green, :fg=>"8f4", :size=>"2", :face=>"arial", :bold=>true
+        Styles.define :quote_heading_h1_green, :fg=>"7c3", :size=>"2", :face=>"arial", :bold=>true
 
-        Styles.define :quote_heading_bracket, :fg=>"4c4c4c", :size=>"-2", :face=>"arial black", :bold=>true
-        Styles.define :quote_heading_small, :fg=>"fff", :size=>"-2", :face=>"arial black", :bold=>true
+        Styles.define :quote_heading_bracket, :fg=>"888", :size=>"-2", :face=>"arial black", :bold=>1
 
-        Styles.define :diff_line_number, :bold=>true, :size=>"-2", :fg=>"444444"
+        Styles.define :quote_heading_small, :size=>"-2", :face=>"arial black", :bold=>true
+
+        Styles.define :diff_line_number, :bold=>true, :size=>"-2", :fg=>"666"
         Styles.define :diff_red, :bg=>"400", :fg=>"ee3333", :size=>"-1"
         Styles.define :diff_red_pipe, :bg=>"400", :fg=>"711", :size=>"0", :face=>"xiki", :bold=>true
-
         Styles.define :diff_green, :bg=>"130", :fg=>"4d3", :size=>"-1"
+
         Styles.define :diff_green_pipe, :bg=>"130", :fg=>"228822", :size=>"0", :face=>"xiki", :bold=>true
-
-        Styles.define :diff_yellow, :bg=>"330", :fg=>"ec0", :size=>"-1"
-        Styles.define :diff_yellow_pipe, :bg=>"330", :fg=>"440", :size=>"0", :face=>"xiki", :bold=>true
-
         Styles.define :diff_small, :fg=>"222", :size=>"-11"
 
+        Styles.define :diff_yellow, :bg=>"330", :fg=>"ec0", :size=>"-1"
+        Styles.define :diff_yellow_pipe, :bg=>"330", :fg=>"770", :size=>"0", :face=>"xiki", :bold=>true
 
         Styles.tree_letters :underline=>1
         Styles.tree_letters2 :underline=>1
 
-        # dir/
-        Styles.define :ls_dir, :fg => "888", :face => "verdana", :size => "-1", :bold => true
-        Styles.define :dropdown_bullet_slash, :fg => "666", :face => "verdana", :size => "-1", :bold => true
-        Styles.define :dropdown_bullet, :fg => "777"
+        Styles.define :ls_dir, :fg=>"888", :face=>"verdana", :size=>"-1", :bold=>true
+        Styles.define :task_bullet_slash, :fg=>"777", :face=>"verdana", :size=>"-1", :bold=>true
+        Styles.define :task_bullet, :fg=>"888"
 
-      else   # if white bg
-        Styles.define :quote_heading_h0, :fg=>"444", :size=>"+8", :face=>"arial", :bold=>true
-        Styles.define :quote_heading_h1, :fg=>"444", :size=>"2", :face=>"arial", :bold=>true
-        Styles.define :quote_heading_h2, :fg=>"aaa", :size=>"-2", :face=>"arial", :bold=>true
-        Styles.define :quote_heading_pipe, :fg=>"bbb", :size=>"0", :face => "xiki", :bold=>true
-        Styles.define :quote_light, :fg=>"ddd", :size=>"0", :face => "xiki", :bold=>true
-        Styles.define :quote_heading_h1_green, :fg=>"8f4", :size=>"2", :face=>"arial", :bold=>true
+        Styles.define :quote_medium, :size=>140, :fg=>"666", :bold=>1
 
-        Styles.define :quote_heading_bracket, :fg=>"bbb", :size=>"-2", :face=>"arial black", :bold=>true
-        Styles.define :quote_heading_small, :fg=>"fff", :size=>"-2", :face => "arial black", :bold=>true
+        # ##search/
+        Styles.define :ls_search, :fg=>"ff7700", :face=>"verdana", :size=>"-2", :bold=>true
 
-        Styles.define :diff_line_number, :bold=>true, :size=>"-2", :fg=>"ccc"
-        Styles.define :diff_red, :bg=>"ffdddd", :fg=>"cc4444", :size=>"-1"
-        Styles.define :diff_red_pipe, :bg=>"ffdddd", :fg=>"cc4444", :size=>"0", :face=>"xiki", :bold=>true
-        Styles.define :diff_green, :bg=>"ddffcc", :fg=>"337744", :size=>"-1"
-
-        Styles.define :diff_green_pipe, :bg=>"ddffcc", :fg=>"337744", :size=>"0", :face=>"xiki", :bold=>true
-        Styles.define :diff_small, :fg=>"ddd", :size=>"-11"
-
-        Styles.define :diff_yellow, :bg=>"ff9", :fg=>"773", :size=>"-1"
-        Styles.define :diff_yellow_pipe, :bg=>"ff9", :fg=>"cc0", :size=>"0", :face=>"xiki", :bold=>true
-
-        Styles.tree_letters :underline=>1
-        Styles.tree_letters2 :underline=>1
-
-        # dir/
-        Styles.define :ls_dir, :fg => "777", :face => "verdana", :size => "-1", :bold => true
-        Styles.define :dropdown_bullet_slash, :fg => "aaa", :face => "verdana", :size => "-1", :bold => true
-        Styles.define :dropdown_bullet, :fg => "999"
-
-      end
-
-      Styles.define :quote_medium, :size=>140, :fg=>"666", :bold=>1
-
-      # ##search/
-      Styles.define :ls_search,
-        :fg=>"ff7700",
-        :face=>"verdana",
-        :size=>"-2",
-        :bold=>true
-
-      if Styles.dark_bg?   #   | Quoted text
-        Styles.define :ls_quote, :size=>"-1", :fg=>"aaa"
+        Styles.define :ls_quote, :size=>"-1", :fg=>"888"
         Styles.define :ls_quote_light, :size=>"-1", :fg=>"555", :bg=>"222"
-      else
-        Styles.define :ls_quote, :size=>"-1", :fg=>"777"
-        Styles.define :ls_quote_light, :size=>"-1", :fg=>"aaa"
+
+        # if ! Styles.dark_bg?
+        #   Styles.define :ls_quote, :size=>"-1", :fg=>"777"
+        #   Styles.define :ls_quote_light, :size=>"-1", :fg=>"aaa"
+
+        # 001| Quoted text lines
+        Styles.define :ls_quote_line_number, :size=>"-4", :fg=>"eee"
+
+        # Highlight in search
+        Styles.define :ls_quote_highlight, :size=>"-1", :bg=>"ffff44", :fg=>"666666"
+
+        # Because default color is too dark for some backgrounds
+        Styles.define :comint_highlight_prompt, :fg=>"#06c"
+
       end
 
-      #   001| Quoted text lines
-      Styles.define :ls_quote_line_number,
-        :size=>"-4",
-        :fg=>"eee"
-
-      # Highlight in search
-      Styles.define :ls_quote_highlight,
-        :size=>"-1",
-        :bg=>"ffff44",
-        :fg=>"666666"
-
-      # Because default color is too dark for some backgrounds
-      Styles.define :comint_highlight_prompt, :fg=>"#06c"
+      return if $el.caching
 
     end
 
     def self.apply_styles
-      $el.el4r_lisp_eval "(setq font-lock-defaults '(nil t))"
 
-      # Must go before quotes - if it goes after, it supercedes them
-      Styles.apply("\\(~\\)\\(.+?\\)\\(~\\)", nil, :quote_heading_bracket, :notes_label, :quote_heading_bracket)
+      Code.cache(:file_tree_apply_styles) do
 
-      # - bullets...
+        Styles.clear
 
-      Styles.apply("^[ \t]*\\([*+-]\\)\\( \\)", nil, :ls_bullet, :variable)   # - fooo, + foo
+        # Must go before quotes - if it goes after, it supercedes them
+        Styles.apply("\\(~\\)\\(.+?\\)\\(~\\)", nil, :quote_heading_bracket, :notes_label, :quote_heading_bracket)
 
-      # ~ foo
-      # ~ foo/ > exists at end of this method, because it has to override the following ones
+        # return if $el.caching
 
-      Styles.apply("^[ \t-]*\\(\\*\\)", nil, :ls_bullet)   # * (by itself)
-      Styles.apply("^ +\\(:[0-9]+\\)\\(|.*\n\\)", nil, :ls_quote_line_number, :ls_quote)   # :NN|foo... used any more?
+        # - bullets...
 
-      # Path-like lines and parts of lines (make gray)
+        Styles.apply("^[ \t]*\\([*+-]\\)\\( \\)", nil, :ls_bullet, :variable)   # - fooo, + foo
 
-      # Single "@" or bullets at beginning
-      Styles.apply("^[ <+=@-]*\\(=\\)", nil, :ls_dir)   # @, <= @, etc.
+        # ~ foo
+        # ~ foo/ > exists at end of this method, because it has to override the following ones
 
-      Styles.apply("^[ \t]*\\(<+[=|@:*+~>-]?\\)", nil, :ls_bullet)   # <<, <=, etc bullets
+        Styles.apply("^[ \t-]*\\(\\*\\)", nil, :ls_bullet)   # * (by itself)
+        Styles.apply("^ +\\(:[0-9]+\\)\\(|.*\n\\)", nil, :ls_quote_line_number, :ls_quote)   # :NN|foo... used any more?
 
-      # Slash after almost anything
+        # Path-like lines and parts of lines (make gray)
 
-      Styles.apply("^ *\\([ <=|@:*+~-]+ \\)?=?\\([+~!$%^&#a-zA-Z0-9_,?* ().:;@='<>-]*[^ \n]\/\\)", nil, nil, :ls_dir)   # foo/ or <=foo/, etc.
+        # Single "@" or bullets at beginning
+        Styles.apply("^[ <+=@-]*\\(=\\)", nil, :ls_dir)   # @, <= @, etc.
 
-      Styles.apply("^ *\\([ <=+-]+ \\)?=?\\(\/\\)", nil, nil, :ls_dir)   # - /
+        Styles.apply("^[ \t]*\\(<+[=|@:*+~>-]?\\)", nil, :ls_bullet)   # <<, <=, etc bullets
 
-      # Covers paths in files by themselves
-      Styles.apply("^ *\\([ <=+-]+ \\)?=?\\([@=~$&a-zA-Z0-9_,*+? ().:;<>-]*\/[@=\#'$a-zA-Z0-9_,*? ().:;\/<>-]+\/\\)", nil, nil, :ls_dir)   # Paths with multiple slashes
+        # Slash after almost anything
 
-      # < next) menus/
-      Styles.apply("^[ \t]*[<+-][<+=-]* [a-zA-Z0-9_,? ().:;+-]+?[:)] \\(\[.@=a-zA-Z0-9 ]+\/\\)", nil, :ls_dir)   # - label) oneword/slash
-      Styles.apply("^[ \t]*[<+-][<+=-]* [a-zA-Z0-9_,? ().:;+-]+?[:)] \\([.@=a-zA-Z0-9 ]+\/[.@=a-zA-Z0-9 \/]+\/\\)", nil, :ls_dir)   # - label) oneword/path/slash
+        Styles.apply("^ *\\([ <=|@:*+~-]+ \\)?=?\\([+~!$%^&#a-zA-Z0-9_,?* ().:;@='<>-]*[^ \n]\/\\)", nil, nil, :ls_dir)   # foo/ or <=foo/, etc.
 
-      # Bullets
-      Styles.apply("^[ \t]*[+-] [^(\n]+?) \\(.+/\\)$", nil, :ls_dir)   # - hey) /what/
-      Styles.apply("^[ \t]*[+-] [a-zA-Z0-9_,? ().:;-]+?: \\(.+/\\)$", nil, :ls_dir)   # - hey: /what/
+        Styles.apply("^ *\\([ <=+-]+ \\)?=?\\(\/\\)", nil, nil, :ls_dir)   # - /
 
-      # Put this one back?
-      #     Styles.apply("^[ +-]*\\([^|\n]+/\\)$", nil, :ls_dir)   # Dirs with bullets
+        # Covers paths in files by themselves
+        Styles.apply("^ *\\([ <=+-]+ \\)?=?\\([@=~$&a-zA-Z0-9_,*+? ().:;<>-]*\/[@=\#'$a-zA-Z0-9_,*? ().:;\/<>-]+\/\\)", nil, nil, :ls_dir)   # Paths with multiple slashes
 
-      Styles.apply('\\(https?\\|file\\|xiki\\|source\\):/[a-zA-Z0-9\/.~_:;,?%&=|+!-#-]+', :notes_link)   # Url
+        # < next) menus/
+        Styles.apply("^[ \t]*[<+-][<+=-]* [a-zA-Z0-9_,? ().:;+-]+?[:)] \\(\[.@=a-zA-Z0-9 ]+\/\\)", nil, :ls_dir)   # - label) oneword/slash
+        Styles.apply("^[ \t]*[<+-][<+=-]* [a-zA-Z0-9_,? ().:;+-]+?[:)] \\([.@=a-zA-Z0-9 ]+\/[.@=a-zA-Z0-9 \/]+\/\\)", nil, :ls_dir)   # - label) oneword/path/slash
 
-      # Styles.apply("^ *\\(:\\)\\($\\| .*\n\\)", nil, :quote_heading_pipe, :ls_quote)   # :... lines (quotes)
-      Styles.apply("^ *\\([\\\\:]\\)\\($\\| .*\n\\)", nil, :quote_heading_pipe, :ls_quote)   # :... lines (quotes)
+        # Bullets
+        Styles.apply("^[ \t]*[+-] [^(\n]+?) \\(.+/\\)$", nil, :ls_dir)   # - hey) /what/
+        Styles.apply("^[ \t]*[+-] [a-zA-Z0-9_,? ().:;-]+?: \\(.+/\\)$", nil, :ls_dir)   # - hey: /what/
+
+        Styles.apply('\\(https?\\|file\\|xiki\\|source\\):/[a-zA-Z0-9\/.~_:;,?%&=|+!-#-]+', :notes_link)   # Url
+
+        Styles.apply("^ *\\([\\\\:]\\)\\($\\| .*\n\\)", nil, :quote_heading_pipe, :ls_quote)   # :... lines (quotes)
 
 
-      # |... lines (quotes)
+        # |... lines (quotes)
 
-      # Is this one adding anything?
-      #     Styles.apply("^ *\\(|\\)\\( *\\)", nil, :quote_heading_pipe, :ls_quote)
+        Styles.apply("^ *\\(|\\)\\(.*\n\\)", nil, :quote_heading_pipe, :ls_quote)   # |... lines (quotes)
 
-      Styles.apply("^ *\\(|\\)\\(.*\n\\)", nil, :quote_heading_pipe, :ls_quote)   # |... lines (quotes)
+        # | hey : you (makes colon big)
+        Styles.apply("^ *\\(|\\)\\( .* \\)\\(:\\)\\( .*\n\\)", nil, :quote_heading_pipe, :ls_quote, :quote_heading_pipe, :ls_quote)
 
-      # | hey : you (makes colon big)
-      # Styles.apply("^ *\\(|\\)\\( .* \\)\\(:\\)\\( .*\n\\)", nil, :quote_heading_pipe, :ls_quote, :quote_heading_pipe_bold, :ls_quote)
-      Styles.apply("^ *\\(|\\)\\( .* \\)\\(:\\)\\( .*\n\\)", nil, :quote_heading_pipe, :ls_quote, :quote_heading_pipe, :ls_quote)
+        Styles.apply("^ *\\(|\\)\\(.+?\\)([+-].*[-+])", nil, :quote_heading_pipe, :ls_quote)   # quoted lines: beginnings of lines
+        Styles.apply("^ *|.*([-+].*[+-])\\(.+\\)$", nil, :ls_quote)   # quoted lines: ends of lines
+        Styles.apply("[+-])\\(.*?\\)([+-]", nil, :ls_quote)   # quoted lines: between diffs
 
-      Styles.apply("^ *\\(|\\)\\(.+?\\)([+-].*[-+])", nil, :quote_heading_pipe, :ls_quote)   # quoted lines: beginnings of lines
-      Styles.apply("^ *|.*([-+].*[+-])\\(.+\\)$", nil, :ls_quote)   # quoted lines: ends of lines
-      Styles.apply("[+-])\\(.*?\\)([+-]", nil, :ls_quote)   # quoted lines: between diffs
+        Styles.apply("^ *\\([|:]\\)\\([()].*\n\\)", nil, :quote_heading_pipe, :ls_quote_light)   # |(... or :(... lines
+        Styles.apply("^ *\\(||\\)\\(.*\n\\)", nil, :quote_heading_pipe, :ls_quote_light)   # ||... or ::... lines
 
-      Styles.apply("^ *\\([|:]\\)\\([()].*\n\\)", nil, :quote_heading_pipe, :ls_quote_light)   # |(... or :(... lines
-      Styles.apply("^ *\\(||\\|::\\)\\(.*\n\\)", nil, :quote_heading_pipe, :ls_quote_light)   # ||... or ::... lines
+        # | >... headings
+        Styles.apply("^ *\\(|\\|:\\)\\( ?\\)\\(>\\)\\(\n\\| .*\n\\)", nil, :quote_heading_pipe, :ls_quote, :quote_heading_bracket, nil)
 
-      # | >... headings
+        # | >>
+        Styles.apply("^ *\\(|\\)\\( \\)\\(>>\\)\\(\n\\| .*\n\\)", nil, :quote_heading_pipe, :ls_quote, :quote_heading_bracket, :quote_heading_small)
+        # | >...! headings
+        Styles.apply("^ *\\(|\\)\\( ?\\)\\(>\\)\\(.*!:?\n\\)", nil, :quote_heading_pipe, :ls_quote, :quote_heading_bracket, :quote_heading_h1_green)
 
-      Styles.apply("^ *\\(|\\|:\\)\\( ?\\)\\(>\\)\\(\n\\| .*\n\\)", nil, :quote_heading_pipe, :ls_quote, :quote_heading_bracket, :quote_heading_h1)
+        #    >>
+        Styles.apply("^ +\\(>>\\)\\(.*\n\\)", nil, :quote_heading_bracket, nil)
 
-      # | >>
-      Styles.apply("^ *\\(|\\)\\( \\)\\(>>\\)\\(\n\\| .*\n\\)", nil, :quote_heading_pipe, :ls_quote, :quote_heading_bracket, :quote_heading_small)
-      # | >...! headings
-      Styles.apply("^ *\\(|\\)\\( ?\\)\\(>\\)\\(.*!:?\n\\)", nil, :quote_heading_pipe, :ls_quote, :quote_heading_bracket, :quote_heading_h1_green)
+        # (indented)  > large:
+        # Styles.apply("^ +\\(> ?\\)\\(.*:\n\\)", nil, :quote_heading_bracket, :quote_heading_h0)
 
-      #    >... headings (indented)
-      Styles.apply("^ +\\(> ?\\)\\(.*\n\\)", nil, :quote_heading_bracket, :quote_heading_h1)
-      Styles.apply("^ +\\(> ?\\)\\(.*!\n\\)", nil, :quote_heading_bracket, :quote_heading_h1_green)
+        # |+... diffs
+        Styles.apply("^ +\\(:[0-9]+\\)$", nil, :ls_quote)
+        Styles.apply("^ *\\([|:]\\+\\)\\(.*\\)", nil, :diff_green_pipe, :diff_green, :face=>"xiki")   # :+...
+        Styles.apply("^ *\\([|:]-\\)\\(.*\\)", nil, :diff_red_pipe, :diff_red)   # :-...
+        Styles.apply("^ *\\([|:]\\?\\)\\(.*\\)", nil, :diff_yellow_pipe, :diff_yellow, :face=>"xiki")   # :?...
 
-      #    >>
-      Styles.apply("^ +\\(>>\\)\\(.*\n\\)", nil, :quote_heading_bracket, :quote_heading_h2)
+        # ::... draw attention to lines with extra colon > in shell output, it means line's expandable
+        Styles.apply("^ *\\(::\\)\\(.*\n\\)", nil, :quote_heading_pipe, :ls_quote)   # ::...
 
-      # (indented)  > large:
-      # Styles.apply("^ +\\(> ?\\)\\(.*:\n\\)", nil, :quote_heading_bracket, :quote_heading_h0)
+        Styles.apply("^ *\\([|:]\\)\\(@@ .*\n\\)", nil, :quote_heading_pipe, :diff_line_number)
 
-      # |+... diffs
-      Styles.apply("^ +\\(:[0-9]+\\)$", nil, :ls_quote)
-      Styles.apply("^ *\\([|:]\\+\\)\\(.*\\)", nil, :diff_green_pipe, :diff_green, :face=>"xiki")   # whole lines
-      Styles.apply("^ *\\([|:]-\\)\\(.*\\)", nil, :diff_red_pipe, :diff_red)
-      Styles.apply("^ *\\([|:]\\?\\)\\(.*\\)", nil, :diff_yellow_pipe, :diff_yellow, :face=>"xiki")   # :?...
+        Styles.apply('^ *\\(//?\\)$', nil, :ls_dir)  # /
+        Styles.apply('^ *\\(\./\\)$', nil, :ls_dir)  # ./
 
-      Styles.apply("^ *\\([|:]\\)\\(@@ .*\n\\)", nil, :quote_heading_pipe, :diff_line_number)
+        # Has to be at bottom, to override other styles...
 
-      Styles.apply('^ *\\(//?\\)$', nil, :ls_dir)  # /
-      Styles.apply('^ *\\(\./\\)$', nil, :ls_dir)  # ./
+        Styles.apply("^[ \t]*\\([*~]\\)\\( \\)\\(.*\\)", nil, :ls_bullet_darker, :variable, :task_bullet)   # ~ fooo
+        Styles.apply("^[ \t]*\\([*~]\\)\\( \\)\\(.*\/$\\)", nil, :ls_bullet_darker, :variable, :task_bullet_slash)   # ~ foo/
 
-      # Has to be at bottom, to override other styles...
-
-      Styles.apply("^[ \t]*\\([*~]\\)\\( \\)\\(.*\\)", nil, :ls_bullet_darker, :variable, :dropdown_bullet)   # ~ fooo
-      Styles.apply("^[ \t]*\\([*~]\\)\\( \\)\\(.*\/$\\)", nil, :ls_bullet_darker, :variable, :dropdown_bullet_slash)   # ~ foo/
+      end
 
     end
 
@@ -545,10 +483,19 @@ module Xiki
     end
 
     def self.matches_root_pattern? item
+
+      # Just leave in for a bit, to catch deprecated $foo... paths
+      if item =~ /^\$[._a-zA-Z0-9-]+(\/|$)/   # Path starts with $xxx, so pull it out and look it up...
+        raise "Don't use $..., use :... > #{path}!"
+      end
+
+      item == "." ||   # just ~ or .
+      item == "~" ||   # just ~ or .
       item =~ /^\/(\w|$)/ ||   # /... or /
       item =~ /^:\w/ ||
-      item =~ /^\$\w/ ||   # Deprecated > remove soon
-      item =~ %r"^(~/|\.\.?/|\$\w)"
+
+      item =~ %r"^(~/|\.\.?/)"
+
     end
 
     def self.suggest_creating quote_string
@@ -603,7 +550,7 @@ module Xiki
     def self.save path, options
 
       # If no prefix, prompt to save (file must not exist since we were called)
-      if options[:prefix] != "update" && options[:dropdown] != ["save"] && options[:dropdown] != ["create"]
+      if options[:prefix] != "update" && options[:task] != ["save"] && options[:task] != ["create"]
         return "~ create/"
       end
 
@@ -810,7 +757,7 @@ module Xiki
       if options[:open_in_bar] || options[:here]
         # Don't upen buffer
       else
-        View.to_buffer "*tree #{name}"
+        View.to_buffer "#{name}/"
         View.clear
         View.dir = Bookmarks.dir_only dir
         Notes.mode
@@ -889,9 +836,9 @@ module Xiki
 
         View.to_nth 1
 
-        # If 2nd view isn't :f, open it
-        if $el.buffer_file_name( $el.window_buffer( View.list[1] ) ) != Bookmarks[":f"]
-          $el.find_file Bookmarks[":f"]
+        # If 2nd view isn't :n, open it
+        if $el.buffer_file_name( $el.window_buffer( View.list[1] ) ) != Bookmarks[":n"]
+          $el.find_file Bookmarks[":n"]
         end
 
         View.to_nth 0
@@ -1079,6 +1026,7 @@ module Xiki
 
     # Enter what's in clipboard with | to on the left margin, with appropriate indent
     def self.enter_quote txt=nil, options={}
+
       prefix = Keys.prefix :clear=>1
 
       # Skip forward if on heading
@@ -1129,6 +1077,9 @@ module Xiki
         return
       end
 
+
+      # Dash+, so start with blank... ??
+
       # Line has content, so indent under...
 
       txt = txt.unindent unless options[:leave_indent]
@@ -1153,11 +1104,17 @@ module Xiki
       txt = txt.sub /\n+\z/, ''   # Remove last \n
 
       quote = target_quote || existing_quote
-      quote ||= '|' if prefix == :- || options[:char]
-      quote ||= ':'
+      quote ||= ':' if options[:char] || prefix == :u || prefix == :-
+      quote ||= '|'
 
       txt = txt.gsub /^/, "#{indent}#{quote} "
       txt = txt.gsub /^( *[|:#]) $/, "\\1"   # Remove trailing spaces
+
+      if prefix == :-
+        View.insert "#{indent}#{quote} \n"
+        Move.backward
+        return
+      end
 
       View.insert "#{txt}\n"
     end
@@ -1179,7 +1136,7 @@ module Xiki
         "^\\s*(task|def|class) "
       elsif extension == "js"
         "(^ *(function)| = function\\()"
-      elsif extension =~ /^notes|deck$/
+      elsif extension =~ /^notes|deck|xiki$/
         # "^[\\|>]( |$)"
         "^>( |$)"
       else
@@ -1375,7 +1332,8 @@ module Xiki
       options.merge!(:recursive=>1) if prefix == :u   # If up+, expand dir recursively
 
       if prefix == :-   # If up+up+, insert /the/path//
-        Line << %Q"#{Bookmarks["$#{Keys.input(:timed=>1)}"]}/"
+        Line << "#{Bookmarks[":#{Keys.input(:timed=>1)}"]}/"   # "
+
 
         Launcher.go
         return
@@ -1432,17 +1390,20 @@ module Xiki
     end
 
     # Returns the files in the dir
+    # FileTree.files_in_dir "/tmp/d", :date_sort=>1
     def self.files_in_dir dir, options={}
       dir = FileTree.add_slash_maybe dir
       all = Dir.glob("#{dir}*", File::FNM_DOTMATCH).
         select {|i| i !~ /\/\.(\.*|svn|git|DS_Store)$/}.   # Exclude some dirs (exclude entensions here too?)
-        select {|i| i !~ /\/\.#/}.sort
+        select {|i| i !~ /\/\.#/}.sort_by{|w| w.downcase}
 
       if options[:date_sort]
         all = all.sort{|a,b| File.mtime(b) <=> File.mtime(a)}
       elsif options[:size_sort]
         all = all.sort{|a,b| File.size(b) <=> File.size(a)}
       end
+
+      return all if options[:merged]
 
       dirs = all.select{|i| File.directory?(i)}#.sort
       files = all.select{|i| File.file?(i)}#.sort
@@ -1530,6 +1491,14 @@ module Xiki
       dir =~ /\/$/ ? dir : "#{dir}/"
     end
 
+    # Add slash to the variable
+    def self.add_slash_maybe! dir
+      if dir !~ /\/$/
+        dir.replace "#{dir}/"
+      end
+      dir
+    end
+
 
     def self.move_dir_to_junior
       Keys.prefix_times.times do
@@ -1604,7 +1573,7 @@ module Xiki
 
       # Eventually only do if :client =~ ^editor\b
 
-      Tree.kill_under
+      Tree.collapse
       Effects.glow :fade_out=>1
       Line.delete
       Line.to_beginning
@@ -1616,7 +1585,7 @@ module Xiki
     end
 
     def self.move_latest_screenshot_to dest_path, dest_dir
-      desktop = Bookmarks['$dt']
+      desktop = Bookmarks[':dt']
 
       latest_screenshot = `ls -t #{desktop} "Screen shot*"`[/Screen shot .*/]
 
@@ -1755,9 +1724,9 @@ module Xiki
     end
 
     # Just puts "=rename/" underneath item the cursor is on...
-    def self.rename_file
+    def self.command_on_filename command
 
-      # Duplicate line, putting =rename_to after indent...
+      # Duplicate line, putting =rename after indent...
 
       line = Line.value
 
@@ -1766,16 +1735,14 @@ module Xiki
 
       has_dot = line =~ /\./
       has_dot ?
-        line.sub!(/^( *)([+-] )?.+(\..+)/, "\\1=rename/\\3") :
-        line.sub!(/^( *)([+-] ).+/, "\\1=rename/")
+        line.sub!(/^( *)([+-] )?.+(\..+)/, "\\1=#{command}/\\3") :
+        line.sub!(/^( *)([+-] )?.+/, "\\1=#{command}/")
 
       Tree.<< line, :no_slash=>1, :no_search=>1
       Move.to_end
       Search.backward("\\.") if has_dot   # Move cursor to before extension
 
-      ControlLock.disable
       ""
-      # Move.backward column_from_right   # Put cursor on same port of filename
 
     end
 
@@ -1816,7 +1783,7 @@ module Xiki
       mode = View.mode
 
       path = View.file
-      View.to_buffer("*tree outline")
+      View.to_buffer("outline/")
       View.clear;  Notes.mode
 
       if path
@@ -1840,7 +1807,6 @@ module Xiki
       when 4   # Get ready to run $... shell command on file
         $el.delete_char(1)
         View << "$ "
-        ControlLock.disable
       when 5   # Unique
         self.enter_lines nil, :current_line=>current_line, :unique=>1
       when 6   # List methods by date (use 'git blame')
@@ -1851,8 +1817,6 @@ module Xiki
         Launcher.launch
       when 8
         Launcher.enter_all
-
-
 
       when 9
         self.enter_lines(/^> (feature|important) > /i, :current_line=>current_line)
@@ -1888,7 +1852,7 @@ module Xiki
 
     def self.expand options
 
-      prefix, dropdown = options[:prefix], options[:dropdown]
+      prefix, task = options[:prefix], options[:task]
 
       file_path = options[:file_path]
 
@@ -1898,35 +1862,7 @@ module Xiki
 
       # If right-click, set prefix to item...
 
-
-      # Ones that apply to both files and dirs
-      if dropdown == ["delete"] || prefix == "delete"
-        # Over-ride, so we don't have to do promt
-        Keys.remember_key_for_repeat(proc {Launcher.launch :dropdown=>["delete"], :no_prompt=>1})
-        self.delete_file file_path, options
-        return
-      elsif dropdown == ["cd"]
-        return self.cd file_path
-      elsif dropdown == ["cd and exit"]
-        $el.kill_emacs "cd #{Files.tilda_for_home file_path, :escape=>1}"
-        return ""
-      elsif dropdown == ["rename"] || prefix == "rename"
-        return self.rename_file
-      end
-
       return options[:output] = self.expand_filter(filters_at_end, options) if filters_at_end
-
-      # $..., so it's a shell command...
-
-      if file_path =~ %r"^(/[\w./ -]+/)([$%&])( .*|\z|\/.*)"   # If $... or %..., etc.
-        dir, prompt, command = $1, $2, $3
-        command.sub! /^ /, ''
-        command.sub! /^\//, ''
-        command = Path.split command
-        options.merge!(:dir=>dir, :prompt=>prompt, :command=>command.shift)
-        options.merge!(:args=>command) if command.any?
-        return options[:output] = self.expand_shell(options)
-      end
 
       # If quoted line, pull it off into :quote...
 
@@ -1965,49 +1901,71 @@ module Xiki
 
         options[:no_slash] = 1
 
-        # Dropdown, so just return the options...
+        # Task, so return or process the task...
 
-        if dropdown == []
-          return options[:output] = "~ save/" if options[:quote]
+        if task
 
-          return options[:output] = "
-            ~ edit/
-            ~ rename
-            ~ delete
-            ~ shell command
-            ~ all
-            ~ outline
+          if options[:quote]
+            # : foo/~ save, so do save
+            return options[:output] = self.save(file_path, options) if task == ["save"]
+            # : foo, so show "~ save/"
+            return options[:output] = "~ save/"
+          end
+
+          menu = Xik.new %`
             ~ search
-            "
+              ! Search.enter_search
+            ~ contents
+              ! Tree.quote(File.read(options[:file_path], *Files.encoding_binary))
+            ~ outline
+              ! FileTree.filter_one_file(options[:file_path]).join("\\n")
 
-        elsif dropdown == ["edit"]
-          options[:nest] = 1
-          return options[:output] = "+ emacs\n+ vim\n+ sublime"
-        elsif dropdown == ["shell command"]
-          ControlLock.disable
-          Tree.<< "$ ", :no_search=>1, :no_slash=>1
-          Move.to_end
-          return options[:output] = ""
-        elsif dropdown == ["search"]
-          ControlLock.disable
-          Search.enter_search
-          return options[:output] = ""
-        elsif dropdown == ["edit", "vim"]
-          $el.suspend_emacs "clear\nvim '#{file_path}'"
-          return options[:output] = ""
-        elsif dropdown == ["edit", "sublime"]
-          Shell.sync "subl '#{file_path}'"
-          return options[:output] = "<! opened in Sublime"
+            ~ delete
+              ! Keys.remember_key_for_repeat(proc {Launcher.launch :task=>["delete"], :no_prompt=>1})
+              ! FileTree.delete_file options[:file_path], options
+            ~ bookmark
+              ! Bookmarks.save
+            ~ file/
+              + rename
+                ! FileTree.command_on_filename "rename"
+              + copy
+                ! FileTree.command_on_filename "copy"
+              + prompt here
+                ! Tree.<< "$ ", :no_search=>1, :no_slash=>1
+                ! Move.to_end
+            ~ edit with/
+              + sublime
+                ! Shell.command "subl \#{options[:file_path]}"
+                ! Ol "options[:file_path]", options[:file_path]
+                ! ""
+              + vim
+                ! DiffLog.quit_and_run "vim \#{options[:file_path]}"
+                ! ""
+              + emacs
+                ! # Probably delete -Q?
+                ! DiffLog.quit_and_run "emacs -nw \#{options[:file_path]}"
+              + default editor
+                ! DiffLog.quit_and_run "\#{ENV['EDITOR']} \#{options[:file_path]}"
+              + xsh
+                ! Ol.a options
+                ! "- todoz!"
+                ! View.open options[:file_path]
+
+            ~ expand
+              ! Launcher.launch
+            ~ grab
+              ! DiffLog.grab options
+          `
+
+          task[0] = "~ #{task[0]}" if task[0]
+
+          result = menu.expand task, :eval=>options
+          return options[:output] = result || ""
+
         end
 
-        return options[:output] = self.filter_one_file(file_path).join("\n") if dropdown == ["outline"] || prefix == "outline"
-        return options[:output] = self.filter_one_file(file_path, /^> .+:$/).join("\n") if prefix == "u outline"
-
-        return options[:output] = Tree.quote(File.read(file_path, *Files.encoding_binary)) if dropdown == ["all"] || prefix == "all"
-
-        return options[:output] = self.save(file_path, options) if (dropdown == ["save"] || prefix == "update" || prefix == "save") && options[:quote]
-
         # If editor, tell it to open the file...
+
         if options[:client] =~ /^editor\b/
           txt = "=open file/#{file_path}"
 
@@ -2029,91 +1987,210 @@ module Xiki
 
       if File.directory? file_path
 
-        if dropdown
+        FileTree.add_slash_maybe! file_path
+
+        if task
 
           require "#{Xiki.dir}commands/sample_menus/sample_menus_index.rb" # if !defined?(SampleMenus)
 
-          cd_and_exit = Environment.xsh? ? "\n            ~ cd and exit" : ""
+          if task == ["rake"]
+            options[:nest] = 1
+            options[:no_task] = 1
+            rake = Shell.command("rake -T -A", :dir=>file_path)
+            rake.gsub!(/ $/, '')
+            return options[:output] = Tree.quote(rake)
+          elsif task[0] == "rake"
+            rake_task = task[1][/rake (\w+)/, 1]
+            return DiffLog.quit_and_run "rake #{rake_task}"
+          end
 
-          menu = Xik.new '
-            ~ rename
-            ~ delete
-            ~ cd'+cd_and_exit+'
-            ~ shell command
-              ! ControlLock.disable
-              ! Tree.<< "$ ", :no_search=>1
-              ! Move.to_end
+          # Dir tasks menu...
+
+          menu = Xik.new(%`
+            ~ examples/
+              ! FileTree.example_commands options
+            ~ recent commands/
+              ! options[:nest] = 1
+              ! options[:no_task] = 1
+              ! txt = Shell.external_plus_sticky_history
+            ~ recent in dir/
+              ! options[:nest] = 1
+              ! options[:no_task] = 1
+              ! Shell.history options[:file_path]
+
+            ~ search
+              ! Tree.<< "- ##/", :no_search=>1
+              ! View.column = -1
               ! ""
-            ~ recent
-              ! # Expand with special flag
+            ~ all files
+              ! FileTree.expand_dir_recursively :file_path=>options[:file_path]
+            ~ modified date sort
               ! FileTree.dir :date_sort=>true
               ! ""
-            ~ new
-              ! Notes.bullet
-              ! ""
-            ~ filter/
-              + search
-                ! ControlLock.disable
-                ! Tree.<< "- ##/", :no_search=>1
-                ! View.column = -1
+            ~ delete
+              ! Keys.remember_key_for_repeat(proc {Launcher.launch :task=>["delete"], :no_prompt=>1})
+              ! FileTree.delete_file options[:file_path], options
+            ~ bookmark
+              ! Bookmarks.save
+
+            ~ file/
+              + rename
+                ! FileTree.command_on_filename "rename"
+              + prompt here
+                ! Tree.<< "$ "
+                ! Line.to_right
                 ! ""
-              + all
-                ! txt = FileTree.grep('+file_path.inspect+', "").join("\n")
-                ! txt.sub(/.+\n/, "")   # Delete 1st line > the redundant dir
-              + filenames
-                ! FileTree.expand_dir_recursively :file_path=>'+file_path.inspect+'
-                ! # "todo > how to just set var saying to add the :all flag? > maybe just handle this one above
-                ! #   or > find method to just insert it here? > but what about recursive search?"
+              + bullet
+                ! Tree.<< "- "
+                ! Line.to_right
+                ! ""
+
+              + cd
+                ! FileTree.cd options[:file_path]
+            ~ more/
               + search filenames
                 ! ControlLock.disable
                 ! Tree.<< "- **/", :no_search=>1
                 ! View.column = -1
                 ! ""
-            ~ create/
-              + txt
-                ! "+ foo.txt\n#{Tree.quote SampleMenus.by_extension("txt"), :indent=>"  "}"
-              + rb
-                ! "+ foo.rb\n#{Tree.quote SampleMenus.by_extension("rb"), :indent=>"  "}"
-              + py
-                ! "+ foo.py\n#{Tree.quote SampleMenus.by_extension("py"), :indent=>"  "}"
-              + js
-                ! "+ foo.js\n#{Tree.quote SampleMenus.by_extension("js"), :indent=>"  "}"
-              + dir
-                ! "+ foo/"
-              + a few files
-                ! options[:no_search] = 1
-                ! File.write "'+file_path+'/a.txt", "aaa\naaa\n"
-                ! File.write "'+file_path+'/b.txt", "bbb\nbbb\n"
-                ! File.write "'+file_path+'/c.notes", "> heading\nccc\nccc\n\n> another\nc c c\n"
-                ! "- a.txt\n- b.txt\n- c.notes"
-              + files and dir
-                ! options[:no_search] = 1
-                ! File.write "'+file_path+'/a.txt", "aaa\naaa\n"
-                ! File.write "'+file_path+'/b.txt", "bbb\nbbb\n"
-                ! File.write "'+file_path+'/c.notes", "> heading\nccc\nccc\n\n> another\nc c c\n"
-                ! Dir.mkdir("'+file_path+'/d") rescue nil
-                ! File.write "'+file_path+'/d/d.txt", "ddd\nddd\n"
-                ! "- a.txt\n- b.txt\n- c.notes\n- d/\n  - d.txt"
-            '
+              + all contents
+                ! txt = FileTree.grep(options[:file_path], "").join("\\n")
+                ! txt.sub(/.+\\n/, "")   # Delete 1st line > the redundant dir
+
+              + expand
+                ! Launcher.launch
+              + grab
+                ! DiffLog.grab options
+
+              + exit and cd
+                ! Shell.exit_and_cd options[:file_path]
+              + create/
+                + txt
+                  ! "+ foo.txt\\n\#{Tree.quote SampleMenus.by_extension("txt"), :indent=>"  "}"
+                + rb
+                  ! "+ foo.rb\\n\#{Tree.quote SampleMenus.by_extension("rb"), :indent=>"  "}"
+                + py
+                  ! "+ foo.py\\n\#{Tree.quote SampleMenus.by_extension("py"), :indent=>"  "}"
+                + js
+                  ! "+ foo.js\\n\#{Tree.quote SampleMenus.by_extension("js"), :indent=>"  "}"
+                + dir
+                  ! "+ foo/"
+                + a few files
+                  ! options[:no_search] = 1
+                  ! File.write "\#{options[:file_path]}/a.txt", "aaa\\naaa\\n"
+                  ! File.write "\#{options[:file_path]}/b.txt", "bbb\\nbbb\\n"
+                  ! File.write "\#{options[:file_path]}/c.notes", "> heading\\nccc\\nccc\\n\\n> another\\nc c c\\n"
+                  ! "- a.txt\\n- b.txt\\n- c.notes"
+                + files and dir
+                  ! options[:no_search] = 1
+                  ! File.write "\#{options[:file_path]}/a.txt", "aaa\\naaa\\n"
+                  ! File.write "\#{options[:file_path]}/b.txt", "bbb\\nbbb\\n"
+                  ! File.write "\#{options[:file_path]}/c.notes", "> heading\\nccc\\nccc\\n\\n> another\\nc c c\\n"
+                  ! Dir.mkdir("\#{options[:file_path]}/d") rescue nil
+                  ! File.write "\#{options[:file_path]}/d/d.txt", "ddd\\nddd\\n"
+                  ! "- a.txt\\n- b.txt\\n- c.notes\\n- d/\\n  - d.txt"
+            ~ expand
+              ! Launcher.launch
+          `.unindent)
+
+          menu << "\n"
+
+          # Append dir tasks...
+
+          # Hard-coded for now. Restructure to move each dir task into separate files, with this structure:
+          # ~/xiki/
+          #   - misc/
+          #     - file_tasks/
+          #       - java.xiki
+          #         | pattern/   < pre-loaded
+          #         |   : *.java
+          #         | java/   < item that'll appear in tasks dropdown
+          #         |   - compile/
+          #     - dir_tasks/
+          #       - xiki.xiki
+          #         | pattern/   < pre-loaded
+          #         |   : menu.*
+          #       - vagrant.xiki
+          #         | pattern/   < pre-loaded
+          #         |   : Vagrantfile
+          #         | vagrant/   < item that'll appear in tasks dropdown
+          #         |   - start/
+          #         |   - stop/
+          #         |     ! code to stop?
+          #         |     $$ or > command to run in shell
+
+          if File.exists? "#{file_path}menu.xiki"
+            menu << "
+            ~ menu
+              ! Line << '/'
+              ! Launcher.launch
+            ".unindent
+          end
+
+          if File.exists? "#{file_path}Rakefile"
+            menu << "
+              ~ rake/
+            ".unindent
+          end
+
+          if File.exists? "#{file_path}Vagrantfile"
+            menu << "
+              ~ vagrant/
+                + connect
+                + start
+                + restart
+                + stop
+            ".unindent
+          end
+
+          if Dir.exists? "#{file_path}.git"
+            menu << "
+              ~ git/
+                + connect
+                + start
+                + restart
+                + stop
+            ".unindent
+          end
+
+          if File.exists? "#{file_path}Gemfile"
+            menu << "
+              ~ gems/
+                : list of gems
+            ".unindent
+          end
+
+          if File.exists? "#{file_path}config/application.rb"
+            menu << "
+              ~ rails/
+                + start
+                  ! DiffLog.quit_and_run 'rails s'
+                + restart
+                + stop
+                + irb
+                + more/
+            ".unindent
+          end
 
           # / and :mouse, so return whole menu...
 
-          return options[:output] = menu.txt_without_code if dropdown == [] && options[:mouse]
+          # return options[:output] = menu.txt_without_code if task == [] && options[:mouse]
 
           # /something, so expand menu...
 
-          dropdown[0] = "~ #{dropdown[0]}" if dropdown[0]
+          task[0] = "~ #{task[0]}" if task[0]
+          result = menu.expand task, :eval=>options
 
-          txt = menu[dropdown, :eval=>options]
-          return options[:output] = txt if txt
+          options[:nest] = 1 if [["~ dir"], ["~ more"]].member?(task)
+
+          return options[:output] = result || ""
 
           # If no output, it should just continue on...
           # Might cause problems?
 
         end
 
-        # TODO: maybe deprecate C-8 prefix for this, only make it enter+all ("all")
-        return options[:output] = self.expand_dir_recursively(options) if prefix == 8 || prefix == "all"
+        # No task, so just expand dir...
 
         options[:date_sort] = 1 if prefix == 6
         return options[:output] = self.expand_one_dir(options)
@@ -2121,12 +2198,12 @@ module Xiki
 
       # ~ create dir, so create it...
 
-      if dropdown == ["create dir"]
+      if task == ["create dir"]
         FileUtils.mkdir_p options[:file_path]
         return options[:output] = "<! created!"
       end
 
-      # Non-existing dir (whether dropdown or not), so show "~ create dir"...
+      # Non-existing dir (whether task or not), so show "~ create dir"...
 
       return options[:output] = "~ create dir/" if options[:file_path] =~ /\/$/
 
@@ -2142,13 +2219,13 @@ module Xiki
         return options[:output] = ": file doesn't exist!"
       end
 
-      # dropdown, so show options for non-existant file...
+      # task, so show options for non-existant file...
 
-      return self.dropdown_for_new_file options if dropdown
+      return self.tasks_for_new_file options if task
 
-      # if dropdown == ""
+      # if task == ""
       #   return options[:output] = "~ create/"
-      # elsif dropdown == "create"
+      # elsif task == "create"
       #   return options[:output] = "
       #     : Content of the
       #     : file to create...
@@ -2163,18 +2240,66 @@ module Xiki
 
     end
 
+    def self.example_commands options
+
+      options[:nest] = 1
+      options[:no_task] = 1   # Don't highlight?
+
+
+      task = options[:task]
+
+      task = task[1..-1]   # Remove "~ example commands"
+
+      # ~ example commands, so list examples by date...
+
+      home_examples_dir = Bookmarks[":xh/misc/shell_examples/"]
+      source_examples_dir = Bookmarks[":xs/misc/shell_examples/"]
+
+      if task == []
+        # home_examples = home_examples_dir
+        home = FileTree.files_in_dir(home_examples_dir, :date_sort=>1, :merged=>1) rescue []
+        source = FileTree.files_in_dir(source_examples_dir, :date_sort=>1, :merged=>1) rescue []
+
+        return (home + source).map{|o| "+ #{File.basename(o, ".*")}/"}.uniq.join("\n")
+      end
+
+      # ~ example commands/foo, so grab from the file...
+
+      command = task.shift
+
+      home_root = "#{home_examples_dir}#{command}//"
+      source_root = "#{source_examples_dir}#{command}//"
+
+      # Try :xh and :xs or, if root, concat both...
+
+      if task == []
+        txt = Expander.expand(home_root, task) rescue ""
+        txt = "#{txt.strip}\n"
+        return txt + Expander.expand(source_root, task) rescue ""
+      end
+
+      txt = Expander.expand(home_root, task) rescue nil
+      txt ||= Expander.expand(source_root, task) rescue ""
+
+      txt
+
+    end
+
     def self.suggest_mkdir file_path
       "~ create dir/"
     end
 
-    def self.dropdown_for_new_file options
+    def self.tasks_for_new_file options
 
       options[:no_slash] = 1
-      dropdown = options[:dropdown]
+      task = options[:task]
 
-      extension = File.extname(options[:file_path])[/\w+/]
+      file_path = options[:file_path]
 
-      if dropdown == []
+      extension = File.extname(file_path)[/\w+/]
+
+
+      if task == []
         # Special treatment for .rb > 2 options
         return options[:output] = "~ script/\n~ class/" if extension == "rb"
         return options[:output] = "~ create/"
@@ -2182,7 +2307,7 @@ module Xiki
 
       # Special treatment for .rb...
 
-      case "#{extension}/#{dropdown[0]}"
+      case "#{extension}/#{task[0]}"
       # when "rb/script"   # The default behavior is fine
       when "rb/class"
         clazz = TextUtil.camel_case File.basename options[:file_path], ".*"
@@ -2197,17 +2322,48 @@ module Xiki
           `)
       end
 
+      # No extension, so look up by the full name...
+
+      if ! extension
+        file_name = File.basename file_path
+
+        # Todo > move this out into a file
+        # file format:
+        # Dockerfile/
+        #   | FROM ubuntu:latest
+        #   | RUN apt-get update
+        # Rakefile/
+        #   | require 'rake'
+        #   | ...
+        txt = {
+          "Dockerfile"=>%`
+            # Sample Dockerfile from xsh
+            FROM ubuntu:latest
+            RUN apt-get update
+            RUN apt-get install -y ruby
+            RUN apt-get install -y nodejs npm
+            RUN sudo gem install sinatra
+
+            # add application sources
+            COPY . /app
+            RUN cd /app; npm install
+
+            # Expose the default port
+            EXPOSE  5000
+
+            # Start command
+            CMD ["nodejs", "/app/web.js"]
+            `.unindent
+        }[file_name]
+
+        return options[:output] = Tree.quote(txt) if txt
+      end
+
       require "#{Xiki.dir}commands/sample_menus/sample_menus_index.rb" # if !defined?(SampleMenus)
       txt = SampleMenus.by_extension(extension)
 
       return options[:output] = Tree.quote(txt)
     end
-
-    def self.expand_shell options
-      options[:no_slash] = 1
-      Shell.shell_command_per_prompt options[:prompt], options
-    end
-
 
     # Removes all ##.../ and **.../ strings.  Returns those that
     # are at the end.

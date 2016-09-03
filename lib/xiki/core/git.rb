@@ -9,19 +9,84 @@ module Xiki
       attr_accessor :line_found
     end
 
+    def self.status_to_hash txt
+
+      # txt example:
+      #   AM a.txt
+      #    M committed.txt
+      #   A  d/d.txt
+      #    D deleteme.txt
+      #   ?? e.txt
+
+      result = {}
+
+      # Pull out lines like these to :untracked...
+      #   ?? a.txt
+
+      untracked = txt.scan(/^(\?\?) (.+)/)
+      untracked.each{|o| o[0] = "untracked" }
+      result[:untracked] = untracked
+
+      # Pull out lines like these to :unadded...
+      #   AM a.txt
+      #    M committed.txt
+      #    D deleteme.txt
+
+      unadded = txt.scan(/^.(\w) (.+)/)
+      unadded.each{|o| o[0] = {"M"=>"modified", "D"=>"deleted"}[o[0]] }
+      result[:unadded] = unadded
+
+      # Pull out lines like these to :added...
+      #   AM a.txt
+      #   A  d/d.txt
+      #   R  rename.txt -> renamed.txt
+
+      added = txt.scan(/^(\w). (.+)/)
+
+      added.each{|o| o[0] = {"A"=>"new file", "R"=>"renamed"}[o[0]] }
+      result[:added] = added
+
+      # result example:
+      #   :unadded   => [
+      #     ["modified", "a.txt"],
+      #     ["deleted", "deleteme.txt"],
+      #   ],
+      #   :added     => [
+      #     ["new file", "a.txt"],
+      #     ["renamed", "rename.txt -> renamed.txt"]
+      #   ],
+      #   :untracked => [
+      #     ["untracked", "e.txt"]
+      #   ]
+
+      result
+
+    end
+
     def self.branch_name dir=nil
       dir ||= Tree.closest_dir
-      Shell.run("git status", :sync=>true, :dir=>dir)[/# On branch (.+)/, 1]
+
+      branch, error = Shell.command "git rev-parse --abbrev-ref HEAD", :dir=>dir, :return_error=>1
+
+      # Error with "unknown revision" means no revisions yet, so return branch as MASTER...
+      return "no commits yet?" if error =~ /^fatal: ambiguous argument 'HEAD': unknown revision/
+
+      # Unknown error, so return branch as nil...
+      return nil if error
+
+      # No error, so return branch...
+      branch.strip
+
     end
 
     def self.do_push
       prefix = Keys.prefix :clear=>true
 
-      file = Keys.bookmark_as_path :prompt=>"Enter a bookmark to git diff in: "
-      branch = self.branch_name file
+      dir = Keys.bookmark_as_path :prompt=>"Enter a bookmark to git diff in: "
+      branch = self.branch_name dir
       txt = "
-        #{file}
-          =git/
+        #{dir}
+          $ git
             - push/#{branch}/
             - diff/
         ".unindent
@@ -32,7 +97,7 @@ module Xiki
         Launcher.launch
       else
         View.bar if prefix == "outline"
-        Launcher.open txt, :buffer_name=>"git diff"
+        Launcher.open txt, :buffer_name=>"git diff/", :buffer_dir=>dir
       end
 
       nil
@@ -84,12 +149,14 @@ module Xiki
     def self.do_status
       dir = Keys.bookmark_as_path :prompt=>"Enter a bookmark to show git status: "
 
+      branch = Xiki::Git.branch_name dir
       menu = "
         #{dir}
           $ git
+            + push/#{branch}/
             + status/
       ".unindent.strip
-      Launcher.open(menu)
+      Launcher.open menu, :buffer_dir=>dir
 
       nil
     end

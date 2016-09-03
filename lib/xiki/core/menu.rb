@@ -350,81 +350,6 @@ module Xiki
       nil
     end
 
-    def self.to_menu
-
-      # "item" is usually for the sub-item we were on, not the actual command name
-      item = Line.without_label
-
-      # > command heading/, so handle separately...
-
-      return self.to_menu_command_heading(item) if item =~ /^>/
-
-      item = Path.split(item)[-1]   # Grab last item (in case multiple items on the same line separated by slashes)
-
-      path = Tree.path
-
-      # If up+, jump to parent menu...
-
-      if Keys.prefix_u
-        path.pop
-      end
-
-      # +foo, so remove plus...
-
-      path[0].sub! /^\+/, ''
-
-      # Remove $ if "$ foo" command
-      path[0].sub! /^\$ /, ''
-
-      options = Expander.expanders path
-
-      source = Tree.source options
-
-      return View.flash "- no source found!" if ! source
-
-      # If was a string, show tree in new view...
-
-      if source.is_a?(String)
-        Launcher.open(source, :no_launch=>1)
-        Launcher.enter_all   # Show dir recursively, or file contents in tree
-        return
-      end
-
-      # Must be [file, line_number], so open and jump to line...
-
-      file, line_number = source
-
-      View.open file
-      return View.line = line_number if line_number
-
-      # Try to find string we were on when key was pressed
-      if item
-        # Todo > Probably don't search if we were on the command root (path only has 1 item)
-        orig = View.cursor
-        View.to_highest
-        item = Search.quote_elisp_regex item
-
-        # How does this even make sense? > [+-] in 'to' part?
-        item.sub! /^(- |\\\+ )/, "[+-] \\.?"   # match if + instead of -, or dot after bullet
-        found = Search.forward item
-        Move.to_axis
-        View.cursor = orig if ! found
-      end
-    end
-
-
-    # Delegated to by .to_menu when it's a command heading
-    def self.to_menu_command_heading item
-
-      command = Xiki::Notes.command_heading :check_current_line=>1
-
-      if ! command
-        View.flash "- This heading contains no command!"
-        return
-      end
-
-    end
-
 
     # Deprecated?
     def self.external menu="", options={}
@@ -540,7 +465,7 @@ module Xiki
         # If no items left on current line, jump to parent and delete
         if Line =~ /^[ +-]+$/
           Tree.to_parent
-          Tree.kill_under
+          Tree.collapse
           Move.to_end
         end
 
@@ -572,7 +497,7 @@ module Xiki
 
       # Go up to root, and kill under
       arrows.times { Tree.to_root }
-      Tree.kill_under
+      Tree.collapse
 
       # Insert line, and launch
       old = Line.delete :leave_linebreak
@@ -605,7 +530,7 @@ module Xiki
       # Shouldn't this be looping like self.collapser_launcher ?
       Tree.to_parent
       Tree.to_parent
-      Tree.kill_under :no_plus=>1
+      Tree.collapse :no_plus=>1
       Tree << output
     end
 
@@ -644,7 +569,7 @@ module Xiki
 
       launch = false if prefix == :u
 
-      Tree.kill_under
+      Tree.collapse
 
       Line.sub! /^([ @=]*).+/, "\\1#{txt}"
 
@@ -660,7 +585,7 @@ module Xiki
       txt = Tree.path.last
       Tree.to_root(:highest=>1)
 
-      Tree.kill_under
+      Tree.collapse
       Line.sub! /^([ @=]*).+/, "\\1#{txt}"
 
       Keys.prefix = "outline"
@@ -705,6 +630,9 @@ module Xiki
       return if ! $el
 
       Mode.define(:menu, ".menu") do
+        Xiki::Notes.mode
+      end
+      Mode.define(:xiki, ".xiki") do
         Xiki::Notes.mode
       end
 
@@ -923,7 +851,7 @@ module Xiki
       elsif extension == "." || !only_one_source || sources[-1][0][/\..+/] != extension
         return options[:output] = "| Different file matches. Try using just a dot with no extension, like:\n|\n| #{options[:name]}." if extension != "."
 
-        txt = Xiki["source", :ancestors=>[options[:path]]]
+        txt = Xiki.expand "source", :ancestors=>[options[:path]]
       else
 
         if File.file? file
@@ -997,6 +925,7 @@ module Xiki
         "conf"=>ConfHandler,   # This should always run
         "rb"=>RubyHandler,
         "menu"=>MenuHandler,
+        "xiki"=>XikiHandler,
         "deck"=>DeckHandler,
         "steps"=>StepsHandler,
         "notes"=>NotesHandler,
@@ -1006,7 +935,7 @@ module Xiki
         "bootstrap"=>BootstrapHandler,
         "txt"=>TxtHandler,
         "py"=>PythonHandler,
-        "dropdown"=>DropdownHandler,
+        "task"=>TaskHandler,
         "js"=>JavascriptHandler,
         "coffee"=>CoffeeHandler,
         "sh"=>ShHandler,
@@ -1014,7 +943,7 @@ module Xiki
         "pgn"=>PgnHandler,
         "erb"=>ErbHandler,
         "/"=>DirHandler,
-        }
+      }
     end
 
     def self.handlers_with_samples
@@ -1032,6 +961,7 @@ module Xiki
     end
 
     def self.determine_handlers options
+
       sources = options[:sources][-1]
       options[:handlers] = ex = {}   # {"/"=>"a/", "rb"=>"a.rb"}
 
@@ -1114,7 +1044,7 @@ module Xiki
     def self.root_sources_from_dir options
       found = self.source_glob options[:menufied]
 
-      raise "Couldn't find source for: #{options}" if ! found
+      raise "Command source file or dir probably doesn't exist. Couldn't find source for: #{options}" if ! found
 
       options[:sources] = [found, :incomplete]
     end
@@ -1155,8 +1085,9 @@ module Xiki
 
       dir = dir.gsub ' ', '[ -_]'   # For spaces in menus, match source files with underscores or dashes, etc
       name.gsub! ' ', '[ -_]'
-
-      list = Dir.glob ["#{dir}/", "#{dir}.*", "#{dir}/index.*", "#{dir}/#{name}_index.*"]
+      list = Dir.glob ["#{dir}/", "#{dir}.*", "#{dir}/index.*", "#{dir}/#{name}_index.*",
+         "#{dir}/menu.*", "#{dir}/#{name}_menu.*"
+        ]
       return nil if list.empty?
 
       containing_dir_length = dir[/.*\//].length
@@ -1309,16 +1240,16 @@ module Xiki
 
     end
 
-    # Xiki::Menu.dropdown "a"
-    # Xiki::Menu.dropdown "a\nb"
-    # Xiki::Menu.dropdown "a\n  b"
-    # Xiki::Menu.dropdown "a\n  b", :no_root=>1
-    # Xiki::Menu.dropdown "a\n  b\n    c"
-    # Xiki::Menu.dropdown "a\nb\n  c\n    d"
-    # Xiki::Menu.dropdown "a\n  b\n  c\n    d"
-    # Xiki::Menu.dropdown "a\nb", :cursor=>View.cursor
-    # Xiki::Menu.dropdown "a\nb", :cursor=>Line.left
-    def self.dropdown txt, options={}
+    # Xiki::Menu.tasks "a"
+    # Xiki::Menu.tasks "a\nb"
+    # Xiki::Menu.tasks "a\n  b"
+    # Xiki::Menu.tasks "a\n  b", :no_root=>1
+    # Xiki::Menu.tasks "a\n  b\n    c"
+    # Xiki::Menu.tasks "a\nb\n  c\n    d"
+    # Xiki::Menu.tasks "a\n  b\n  c\n    d"
+    # Xiki::Menu.tasks "a\nb", :cursor=>View.cursor
+    # Xiki::Menu.tasks "a\nb", :cursor=>Line.left
+    def self.tasks txt, options={}
 
       txt.unindent! if txt =~ /\A\n/   # Unindent if passed in indented over
 
@@ -1347,7 +1278,7 @@ module Xiki
         y += offset[1]
       end
 
-      # Setting ns-menu-display-services makes aquamacs not add the google etc menu items to the dropdown.
+      # Setting ns-menu-display-services makes aquamacs not add the google etc menu items to the task.
 
       lisp = "
         (easy-menu-define my-menu nil \"temp menu\"\n'#{txt.strip}\n)

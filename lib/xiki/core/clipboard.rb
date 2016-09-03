@@ -189,21 +189,23 @@ module Xiki
       prefix = Keys.prefix
 
       if prefix == :u or options[:rest]   # If U prefix, get rest of paragraph
-        left, right = View.paragraph(:bounds => true, :start_here => true)
+        left, right = View.paragraph(:bounds=>true, :start_here=>true)
       else
         if prefix   # If numeric prefix
-          self.as_line
+          Line.next 0
+          View.select
+          Line.next prefix
           return
         end
         # If no prefix, get whole paragraph
-        left, right = View.paragraph(:bounds => true)
+        left, right = View.paragraph(:bounds=>true)
       end
 
       if options[:just_return]
         return [View.txt(left, right), left, right]
       end
-      $el.goto_char left
-      $el.set_mark right
+      $el.goto_char right
+      $el.set_mark left
       Effects.blink(:left=>left, :right=>right)
     end
 
@@ -362,18 +364,20 @@ module Xiki
     def self.kill
       prefix = Keys.prefix # :clear=>1
 
-      # 0+, so delete line without linebreak
-      return $el.kill_region Line.left, Line.right if prefix == :u
+      # up+, so delete current line
+      prefix = 1 if prefix == :u
+
+      if prefix == 0
+        # Delete the blank line, if nothing here
+        return Line.delete if Line.blank?
+        return Line.delete(:leave_linebreak)
+      end
 
       if prefix # == :u
         Line.to_left
       end
 
       # up+, so just delete (don't save in clipboard)
-
-      if prefix == :u
-        return Line.delete
-      end
 
       $el.kill_line prefix
     end
@@ -383,11 +387,27 @@ module Xiki
     end
 
     def self.select
-      if $el.elvar.mark_active
-        $el.exchange_point_and_mark
-      else   # Mark already set, so just jump to other side
-        $el.cua_set_mark
+
+      # up+, so just re-select what was selected last...
+
+      if Keys.prefix_u
+        right = View.cursor
+        View.cursor = $el.mark
+        left = View.cursor
+        View.selection = [right, left]
+        return
       end
+
+      # Text already selected, so just just jump to other side...
+
+      if $el.elvar.mark_active
+        return $el.exchange_point_and_mark
+      end
+
+      # Nothing selected yet, so just select
+
+      $el.cua_set_mark
+
     end
 
     def self.init_in_client
@@ -401,9 +421,13 @@ module Xiki
         to_os_code = '"copy_from_osx" "*Messages*" "pbcopy"'
       end
 
-      if Environment.xsh? && Environment.os == "linux" && Shell.sync("which xclip").any?
-        from_os_code = '"xclip -o -selection clipboard"'
-        to_os_code = '"xclip" "*Messages*" "xclip" "-selection" "clipboard"'
+      if Environment.xsh? && Environment.os == "linux"
+        txt, error = Shell.sync("xclip -o -selection clipboard", :return_error=>1)
+        # Only use xclip if it exists and it's not returning an error
+        if ! error
+          from_os_code = '"xclip -o -selection clipboard"'
+          to_os_code = '"xclip" "*Messages*" "xclip" "-selection" "clipboard"'
+        end
       end
 
       return if ! from_os_code

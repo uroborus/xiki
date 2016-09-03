@@ -59,7 +59,7 @@ module Xiki
         loc = Keys.input(:optional=>true)
         loc ||= "0"
         loc = "_#{loc}"
-        View.open("$#{loc}")
+        View.open(":#{loc}")
         # Optionally go to point
         $el.bookmark_jump(loc) unless $el.elvar.current_prefix_arg
 
@@ -67,7 +67,7 @@ module Xiki
 
       # If symbol, look up location in map and go to it
       elsif path.class == Symbol
-        View.open("$#{path.to_s}")
+        View.open(":#{path.to_s}")
         @@spots[path.to_s].go
 
         return
@@ -133,8 +133,25 @@ module Xiki
 
     end
 
-    def self.to_spot key='0'
-      @@spots[key].go
+    def self.hop_remembered
+
+      txt = View.selection
+      self.to_spot
+
+      # They'd selected nothing, so hopping is all we needed to do...
+
+      return if ! txt
+
+      # They'd selected something, so put it here...
+
+      View.insert txt, :dont_move=>1
+    end
+
+    def self.to_spot key='0', options={}
+
+      loc = @@spots[key]
+      return if ! loc
+      loc.go
     end
 
   end

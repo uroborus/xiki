@@ -149,7 +149,7 @@ module Xiki
 
       if ! file || Keys.prefix_u
         bm = Keys.input(:timed=>true, :prompt=>"Enter bookmark of file to tail (or period for current file): ")
-        file = (bm == ".") ? View.file : Bookmarks["$#{bm}"]
+        file = (bm == ".") ? View.file : Bookmarks[":#{bm}"]
       end
 
       Shell.run "tail -f #{file}", :buffer => "*tail of #{file}"
@@ -230,10 +230,12 @@ module Xiki
 
     def self.do_load_file
 
-      if View.name == "*diff with saved*"   # If viewing diff, close it and save the actual file...
+      if View.name == "diff with saved/"   # If viewing diff, close it and save the actual file...
         file = View.txt[/.+\n.+/].sub("\n  - ", "")
         View.kill
-        View.open file
+
+        # Way to move to the buffer that doesn't show warnings
+        $el.set_buffer $el.get_file_buffer(file)
       end
 
       $el.revert_buffer(true, true, true) rescue nil
@@ -257,7 +259,7 @@ module Xiki
       path = Keys.input "#{message}: ", :timed=>1
 
       # They typed a word, so expand it as a bookmark
-      path = Bookmarks["$#{path}"] if path =~/^\w/
+      path = Bookmarks[":#{path}"] if path =~/^\w/
       path = File.expand_path path
 
       is_dir = File.directory? path
@@ -265,26 +267,13 @@ module Xiki
 
       View.insert path
 
-
-      # up+, so don't expand...
-
-      return if Keys.prefix_u
-
-      # Dir, so expand normally...
-
-      return Launcher.launch if is_dir
-
-      # File, so expand as contents...
-
-      Launcher.launch :dropdown=>["all"]
-
     end
 
     # This is currently mac-specific
     def self.open_last_screenshot
 
-      dirs = `ls -t #{Bookmarks["$dt"]}`
-      screenshot = Bookmarks["$dt"]+dirs[/.+/]
+      dirs = `ls -t #{Bookmarks[":dt"]}`
+      screenshot = Bookmarks[":dt"]+dirs[/.+/]
 
       self.open_as screenshot, "Adobe Illustrator"
 
@@ -332,18 +321,18 @@ module Xiki
     end
 
     def self.open_nth nth
-      prefix = Keys.prefix# :clear=>1
+      prefix = Keys.prefix  # :clear=>1
 
       prefix == :u ?
-        View.layout_todo(:no_blink=>1) :
-        View.layout_files(:no_blink=>1)
+        View.open(":t") :
+        View.open(":n")
 
       if nth != 0
         View.to_highest
         nth.times { Move.to_quote }
       end
 
-      Effects.blink
+      Effects.blink if View.list.length > 1
       Launcher.launch
     end
 
@@ -396,9 +385,14 @@ module Xiki
 
     # Replaces home with tilda
     # Files.tilda_for_home "/Users/craig/projects/"
+
+    # Todo > fix spelling mistake > "tilda" -> "tilde"
+
     def self.tilda_for_home path, options={}
+
       home = ENV['HOME']
       return path if ! home
+
       path = path.sub(/\A#{Regexp.quote home}/, "~")
       path.gsub!(' ', '\ ') if options[:escape]
       path

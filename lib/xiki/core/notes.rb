@@ -299,7 +299,6 @@ module Xiki
 
       Xiki.def("custom+heading", :map=>:notes_mode_map){ Notes.insert_heading }
 
-      $el.message ""
       $el.define_key(:notes_mode_map, $el.kbd("<double-mouse-1>"), :notes_mouse_double_click)
       $el.define_key(:notes_mode_map, $el.kbd("<mouse-1>"), :notes_mouse_toggle)
 
@@ -308,204 +307,230 @@ module Xiki
       $el.define_key(:notes_mode_map, $el.kbd("<C-mouse-1>"), :notes_mouse_double_click)
 
       # custom+N, to jump to nth visible label
+      # custom+1, custom+2, etc
       (1..9).each do |n|
         $el.define_key(:notes_mode_map, $el.kbd("C-c C-#{n}")){ Launcher.do_last_launch :nth=>n, :here=>1, :dont_launch=>1 }
       end
 
-      $el.define_key(:notes_mode_map, $el.kbd("C-m")) { View.insert_line }
+      # For now, don't over-ride return > it's messing up pasting in the terminal
+      #       $el.define_key(:notes_mode_map, $el.kbd("C-m")) { View.insert_line }
 
       $el.define_key(:notes_mode_map, $el.kbd("C-i")) { Notes.tab_key }
 
-      $el.message ""
+      $el.define_key(:notes_mode_map, $el.kbd("C-m")) { Notes.return_wrapper }
 
     end
 
     def self.define_styles
 
-      raise "maybe put this line back:" if ! $el
+      Code.cache(:notes_define_styles) do
 
-      # - foo (r): <here>
-      Styles.define :variable, :face => 'verdana'
+        # - foo (r): <here>
+        Styles.define :variable, :face => 'verdana'
 
-      # >...
-      h1_size = "+3"
+        # >...
+        h1_size = "+3"
+        bg = "555"
+        pipe = "666"
 
-      if Styles.dark_bg?
-        bg = "444"
-      else
-        bg = "909090"
-        #"292929" : "909090"
-      end
+        label = "bbb"
 
-      pipe = "555"
-      label = "bbb"
+        Styles.define :notes_h1, :face=>'arial', :size=>h1_size, :fg=>'ccc', :bg=>bg, :bold=>nil
+        Styles.define :notes_h1_pipe, :face=>'arial', :size=>h1_size, :fg=>pipe, :bg=>bg, :bold=>true
+        Styles.define :notes_h1_label, :face=>'arial', :size=>h1_size, :fg=>label, :bg=>bg, :bold=>true
 
-      Styles.define "notes_h1", :face=>'arial', :size=>h1_size, :fg=>'bbb', :bg=>bg, :bold=>nil
-      Styles.define "notes_h1_pipe", :face=>'arial', :size=>h1_size, :fg=>pipe, :bg=>bg, :bold=>true
-      Styles.define "notes_h1_label", :face=>'arial', :size=>h1_size, :fg=>label, :bg=>bg, :bold=>true
+        Styles.define :notes_h1_agenda_pipe, :face => 'arial', :size => h1_size, :fg => '88cc88', :bg => '336633', :bold =>  true
+        Styles.define :notes_h1_agenda, :face => 'arial', :size => h1_size, :fg => 'ffffff', :bg => '336633', :bold => true
 
-      Styles.define :notes_h1_agenda_pipe, :face => 'arial', :size => h1_size, :fg => '88cc88', :bg => '336633', :bold =>  true
-      Styles.define :notes_h1_agenda, :face => 'arial', :size => h1_size, :fg => 'ffffff', :bg => '336633', :bold => true
+        # >>>...
+        Styles.define :notes_h3,
+          :face => 'arial', :size => "-1",
+          :fg => '999',#, :bg => "9999cc",
+          :bold =>  true
+        Styles.define :notes_h3_pipe,
+          :face => 'arial', :size => "-1",
+          :fg => '333'
 
-      # >>>...
-      Styles.define :notes_h3,
-        :face => 'arial', :size => "-1",
-        :fg => '999',#, :bg => "9999cc",
-        :bold =>  true
-      Styles.define :notes_h3_pipe,
-        :face => 'arial', :size => "-1",
-        :fg => '333'
+        # >>>>...
+        Styles.define :notes_h4,
+          :face => 'arial', :size => "-3",
+          :fg => '55b',
+          :bold =>  true
+        Styles.define :notes_h4_pipe,
+          :face => 'arial', :size => "-3",
+          :fg => '224'
 
-      # >>>>...
-      Styles.define :notes_h4,
-        :face => 'arial', :size => "-3",
-        :fg => '55b',
-        :bold =>  true
-      Styles.define :notes_h4_pipe,
-        :face => 'arial', :size => "-3",
-        :fg => '224'
-
-
-      if Styles.dark_bg?   # If black and white
         label_color = "e70"
-      else
-        label_color = "f70"
-      end
 
-      # Labels, emphasis
-      Styles.define :notes_label,
-        :face=>'arial black', :size=>"0",  # Mac
-        :fg=>label_color, :bold=>true
 
-      Styles.define :notes_bullet_parens,
-        :face => 'arial', :size => "-2",
-        :fg => "ee7700", :bold => true
+        # Labels, emphasis
+        Styles.define :notes_label,
+          :face=>'arial black', :size=>"0",  # Mac
+          :fg=>label_color, :bold=>true
 
-      # Strikethrough
-      Styles.define(:strike, :strike=>true)
+        Styles.define :notes_bullet_parens,
+          :face => 'arial', :size => "-2",
+          :fg => "ee7700", :bold => true
 
-      Styles.define :notes_g, :fg=>"6cf", :face=>'arial black', :size=>"0", :bold=>true
-      Styles.define :notes_blue, :fg=>"69f", :face=>'arial black', :size=>"0", :bold=>true
-      Styles.define :notes_red, :fg=>"c55", :face=>'arial black', :size=>"0", :bold=>true
-      Styles.define :notes_yellow, :fg=>"CC0", :face=>'arial black', :size=>"0", :bold=>true
-      Styles.define :notes_green, :fg=>"3c3", :face=>'arial black', :size=>"0", :bold=>true
+        # Styles.define :hidden, :fg=>"777", :bg=>"777"
+        Styles.define :hidden, :fg=>"333", :bg=>"333"
 
-      bg_color = Styles.attribute(:default, :background)
+        Styles.define :notes_g, :fg=>"6cf", :face=>'arial black', :size=>"0", :bold=>true
+        Styles.define :notes_blue, :fg=>"69f", :face=>'arial black', :size=>"0", :bold=>true
+        Styles.define :notes_red, :fg=>"c55", :face=>'arial black', :size=>"0", :bold=>true
+        Styles.define :notes_yellow, :fg=>"cb0", :face=>'arial black', :size=>"0", :bold=>true
+        Styles.define :notes_green, :fg=>"3c3", :face=>'arial black', :size=>"0", :bold=>true
 
-      if Styles.dark_bg?   # If black bg
+        bg_color = Styles.attribute(:default, :background)
+
+
         Styles.define :notes_h2, :face=>'arial', :size=>"-1", :fg=>'999'
-        Styles.define :notes_h2_pipe, :face=>'arial', :size=>"-1", :fg=>'555'
-        Styles.define :notes_h0_pipe, :face=>'arial', :size=>"+8", :fg=>'555', :bg=>"444", :bold=> true
-        Styles.define :notes_h0, :fg=>"fff", :bg=>"444", :face=>'arial', :size=>"+8", :bold=>true
-        Styles.define :notes_h0_green, :fg=>"8f4", :bg=>"444", :face=>'arial', :size=>"+8", :bold=>true
-        Styles.define :notes_h0_green_pipe, :fg=>"555", :bg=>"444", :face=>'arial', :size=>"+8", :bold=>true
-        Styles.define :notes_h1_green, :fg=>"8f4", :bg=>"444", :face=>'arial', :size=>"+3", :bold=>nil
-        Styles.define :notes_h1_green_pipe, :fg=>"555", :bg=>"444", :face=>'arial', :size=>"+3", :bold=>true
+        Styles.define :notes_h2_pipe, :face=>'arial', :size=>"-1", :fg=>pipe
+        Styles.define :notes_h0_pipe, :face=>'arial', :size=>"+8", :fg=>pipe, :bg=>bg, :bold=> true
+        Styles.define :notes_h0, :fg=>"fff", :bg=>bg, :face=>'arial', :size=>"+8", :bold=>true
+        Styles.define :notes_h0_green, :fg=>"8f4", :bg=>bg, :face=>'arial', :size=>"+8", :bold=>true
+        Styles.define :notes_h0_green_pipe, :fg=>pipe, :bg=>bg, :face=>'arial', :size=>"+8", :bold=>true
+        Styles.define :notes_h1_green, :fg=>"8f4", :bg=>bg, :face=>'arial', :size=>"+3", :bold=>nil
+        Styles.define :notes_h1_green_pipe, :fg=>pipe, :bg=>bg, :face=>'arial', :size=>"+3", :bold=>true
 
-      else   # If white bg
-        Styles.define :notes_h2, :face=>'arial', :size=>"-1", :fg=>'fff'
-        Styles.define :notes_h2_pipe, :face=>'arial', :size=>"-1", :fg=>'b0b0b0'
-        Styles.define :notes_h0_pipe, :face=>'arial', :size=>"+8", :fg=>'b0b0b0', :bg=>"909090", :bold=>true
-        Styles.define :notes_h0, :fg=>"fff", :bg=>"909090", :face=>'arial', :size=>"+8", :bold=>true
-        Styles.define :notes_h0_green, :fg=>"af0", :bg=>"909090", :face=>'arial', :size=>"+8", :bold=>true
-        Styles.define :notes_h0_green_pipe, :fg=>"b0b0b0", :bg=>"909090", :face=>'arial', :size=>"+8", :bold=>true
-        Styles.define :notes_h1_green, :fg=>"af0", :bg=>"909090", :face=>'arial', :size=>"+3", :bold=>1
-        Styles.define :notes_h1_green_pipe, :fg=>"b0b0b0", :bg=>"909090", :face=>'arial', :size=>"+3", :bold=>true
-      end
+        Styles.define :escape_glyph, :fg=>"666"   # Red special char was too ugly
+        Styles.define :trailing_whitespace, :bg=>'555'
 
-      Styles.define :quote_hidden, :fg=>bg_color
 
-      if Styles.dark_bg?   # If black bg
+        # else   # If white bg
+        #   Styles.define :notes_h2, :face=>'arial', :size=>"-1", :fg=>'fff'
+        #   Styles.define :notes_h2_pipe, :face=>'arial', :size=>"-1", :fg=>'b0b0b0'
+        #   Styles.define :notes_h0_pipe, :face=>'arial', :size=>"+8", :fg=>'b0b0b0', :bg=>"909090", :bold=>true
+        #   Styles.define :notes_h0, :fg=>"fff", :bg=>"909090", :face=>'arial', :size=>"+8", :bold=>true
+        #   Styles.define :notes_h0_green, :fg=>"af0", :bg=>"909090", :face=>'arial', :size=>"+8", :bold=>true
+        #   Styles.define :notes_h0_green_pipe, :fg=>"b0b0b0", :bg=>"909090", :face=>'arial', :size=>"+8", :bold=>true
+        #   Styles.define :notes_h1_green, :fg=>"af0", :bg=>"909090", :face=>'arial', :size=>"+3", :bold=>1
+        #   Styles.define :notes_h1_green_pipe, :fg=>"b0b0b0", :bg=>"909090", :face=>'arial', :size=>"+3", :bold=>true
+        #   Styles.define :escape_glyph, :fg=>"999"   # Red special char was too ugly
+        #   Styles.define :trailing_whitespace, :bg=>'ccc'
+
+        Styles.define :quote_hidden, :fg=>bg_color
+
         Styles.dotted :bg=>'080808', :fg=>'111', :strike=>nil, :underline=>nil, :border=>['111', -1]
-      else
-        Styles.dotted :bg=>'eee', :fg=>'ddd', :strike=>nil, :underline=>nil, :border=>['ddd', -1]
+
+        notes_exclamation_color = Styles.dark_bg? ? "4c4" : "5a0"
+
+        Styles.define :notes_exclamation,  # Green bold text
+          :face=>'arial black', :size=>"0",
+          :fg=>notes_exclamation_color, :bold=>true
+
+        Styles.define :notes_link, :fg=>(Styles.dark_bg? ? "39b" : "08f"), :bold=>false
+
+        Styles.define :shell_prompt, :fg=>'#888', :bold=>1
+
       end
-
-      notes_exclamation_color = Styles.dark_bg? ? "7c4" : "5a0"
-
-      Styles.define :notes_exclamation,  # Green bold text
-        :face=>'arial black', :size=>"0",
-        :fg=>notes_exclamation_color, :bold=>true
-
-      Styles.notes_link :fg=>(Styles.dark_bg? ? "9ce" : "08f")
-
-      Styles.shell_prompt :fg=>'#888', :bold=>1
 
     end
 
     def self.apply_styles
+
       # Don't format quotes (it overrides the following formatting)
-      Styles.clear
 
-      # >... lines (headings)
-      Styles.apply("^\\(>\\)\\(.*\n\\)", nil, :notes_h1_pipe, :notes_h1)
+      Code.cache(:notes_apply_styles) do
+        Styles.clear
 
-      Styles.apply("^\\(> \\)\\(.*\n\\)", nil, :notes_h1_pipe, :notes_h1)
-      Styles.apply("^\\(>> \\)\\(.*\n\\)", nil, :notes_h2_pipe, :notes_h2)
-
-      # > Green!
-      Styles.apply("^\\(> \\)\\(.*!\\)\\(\n\\)", nil, :notes_h1_green_pipe, :notes_h1_green, :notes_h1_green)
-
-      # > Large:
-      Styles.apply("^\\(> \\)\\(.*:\\)\\(\n\\)", nil, :notes_h0_pipe, :notes_h0, :notes_h0)
-
-      Styles.apply("^\\(> \\)\\(.*!:\\)\\(\n\\)", nil, :notes_h0_green_pipe, :notes_h0_green, :notes_h0_green)
-
-      Styles.apply("^\\(>\\)\\( .+?: \\)\\(.+\n\\)", nil, :notes_h1_pipe, :notes_h1_label, :notes_h1)
+        Styles.apply("^\\(>\\)\\(.*\n\\)", nil, :notes_h1_pipe, :notes_h1)
 
 
-      # >>... lines
-      Styles.apply("^\\(>>\\)\\(.*\n\\)", nil, :notes_h2_pipe, :notes_h2)
+        # >... lines (headings)
+        Styles.apply("^\\(>\\)\\(.*\n\\)", nil, :notes_h1_pipe, :notes_h1)
 
-      # Commented
-      Styles.apply("^\\(>> .+?: \\)\\(.+\n\\)", nil, :notes_h2_pipe, :notes_h2)
+        Styles.apply("^\\(> \\)\\(.*\n\\)", nil, :notes_h1_pipe, :notes_h1)
+        Styles.apply("^\\(>> \\)\\(.*\n\\)", nil, :notes_h2_pipe, :notes_h2)
 
-      # >>>... lines
-      Styles.apply("^\\(>>>\\)\\(.*\n\\)", nil, :notes_h3_pipe, :notes_h3)
+        # > Green!
+        Styles.apply("^\\(> \\)\\(.*!\\)\\(\n\\)", nil, :notes_h1_green_pipe, :notes_h1_green, :notes_h1_green)
 
-      # >>>... lines
-      Styles.apply("^\\(>>>>\\)\\(.*\n\\)", nil, :notes_h4_pipe, :notes_h4)
+        # > Large:
+        Styles.apply("^\\(> \\)\\(.*:\\)\\(\n\\)", nil, :notes_h0_pipe, :notes_h0, :notes_h0)
 
-      # - bullets with labels and comments
-      Styles.apply("^[ \t]*\\([<+-][<+=-]*\\) \\([^/:\n]+:\\) ", nil, :ls_bullet, :notes_label)   # - hey: you
-      Styles.apply("^[ \t]*\\([<+-][<+=-]*\\) \\([^(\n]*?)\\)\\( \\|$\\)", nil, :ls_bullet, :notes_label)   # - hey) you
+        Styles.apply("^\\(> \\)\\(.*!:\\)\\(\n\\)", nil, :notes_h0_green_pipe, :notes_h0_green, :notes_h0_green)
 
-      Styles.apply("^[ \t]*\\([<+-][<+=-]*\\) \\(.*:\\)$", nil, :ls_bullet, :notes_label)   # - hey:
-
-      Styles.apply("^\\([ \t]*\\)\\([<+-]\\) \\(.+?:\\) +\\(|.*\n\\)", nil, :default, :ls_bullet, :notes_label, :ls_quote)
-      Styles.apply("^\\([ \t]*\\)\\([<+-]\\) \\([^(\n]+?)\\) +\\(|.*\n\\)", nil, :default, :ls_bullet, :notes_label, :ls_quote)
-
-      Styles.apply("^ *\\(!.*\n\\)", nil, :ls_quote)   # ^!... for code
-
-      # exclamation! / todo
-      Styles.apply("^[ \t]*\\([<+-]\\) \\(.*!\\)$", nil, :ls_bullet, :notes_exclamation)
-      Styles.apply("^ +\\(!\\+.*\n\\)", nil, :diff_green)   # Whole lines
-      Styles.apply("^ +\\(!-.*\n\\)", nil, :diff_red)
-
-      Styles.apply("\\(\(-\\)\\(.+?\\)\\(-\)\\)", nil, :diff_small, :diff_red, :diff_small)
-      Styles.apply("\\(\(\\+\\)\\(.+?\\)\\(\\+\)\\)", nil, :diff_small, :diff_green, :diff_small)
-
-      # google/
-      Styles.apply "^ *\\(-?\\) ?\\([@=]?\\)\\(g\\)\\(o\\)\\(o\\)\\(g\\)\\(l\\)\\(e\\)\\(/\\)", nil, :ls_bullet, :ls_dir,   # google
-        :notes_blue, :notes_red, :notes_yellow, :notes_blue, :notes_green, :notes_red,
-        :ls_dir
-
-      Styles.apply "^hint/.+", :fade6
-
-      # $..., %..., etc.
-      Styles.apply "^[< ]*[@=]? ?\\([%$&!]\\)\\( \\|$\\)", nil, :shell_prompt   # Colorize shell prompts after "@"
-
-      # $$...
-      Styles.apply "^[< ]*[@=]? ?\\(\\$\\$\\)", nil, :shell_prompt   # Colorize shell prompts after "@"
+        Styles.apply("^\\(>\\)\\( .+?: \\)\\(.+\n\\)", nil, :notes_h1_pipe, :notes_h1_label, :notes_h1)
 
 
-      # Make |~... lines be Dotsies
-      Styles.apply("^ *\\(|~\\)\\([^\n~]+\\)\\(~?\\)", nil, :quote_heading_pipe, :dotsies, :quote_heading_pipe)
+        # >>... lines
+        Styles.apply("^\\(>>\\)\\(.*\n\\)", nil, :notes_h2_pipe, :notes_h2)
 
-      # |#... invisible
-      Styles.apply("^ *\\(|[#*]\\)\\(.*\n\\)", nil, :quote_light, :quote_hidden)
+        # Commented
+        Styles.apply("^\\(>> .+?: \\)\\(.+\n\\)", nil, :notes_h2_pipe, :notes_h2)
 
-      Styles.apply "^ *|\\^.*\n", :quote_medium
+        # >>>... lines
+        Styles.apply("^\\(>>>\\)\\(.*\n\\)", nil, :notes_h3_pipe, :notes_h3)
+
+        # >>>... lines
+        Styles.apply("^\\(>>>>\\)\\(.*\n\\)", nil, :notes_h4_pipe, :notes_h4)
+
+        # foo: > style like dir
+        Styles.apply("\\(^[\A-Za-z0-9 ][\A-Za-z0-9 '_.,>?-]*[\A-Za-z0-9.?]:\\)\\($\\| \\)", nil, :ls_dir)   # foo:
+        Styles.apply("\\(^[\A-Za-z0-9 ]:\\)\\($\\| \\)", nil, :ls_dir)   # f:   < just 1 letter
+
+        #    >... headings (indented)
+        Styles.apply("^ +\\(> ?\\)\\(.*\n\\)", nil, :quote_heading_bracket, nil)
+        Styles.apply("^ +\\(> ?\\)\\(.*!\n\\)", nil, :quote_heading_bracket, :quote_heading_h1_green)
+
+        # - bullets with labels and comments
+
+
+        # Todo > instead of having both here > make one syntax that catches them both
+        # - only match when: 1st char after space can't be [>|]
+        #   - probably > 1st char after space has to be alphanumeric
+
+        Styles.apply("^[ \t]*\\([<+-][<+=-]*\\) \\([^/:\n]+:\\) ", nil, :ls_bullet, :ls_dir)   # - foo: bar
+
+        Styles.apply("^[ \t]*\\([<+-][<+=-]*\\) \\([^(\n]*?)\\)\\( \\|$\\)", nil, :ls_bullet, :notes_label)   # - foo) bar
+
+        Styles.apply("^[ \t]*\\([a-z][^:|(\n]*)\\)\\( \\|$\\)", nil, :notes_label)   # - foo) bar
+
+        Styles.apply("^[ \t]*\\([<+-][<+=-]*\\) \\(.*:\\)$", nil, :ls_bullet, :notes_label)   # - foo:
+
+
+        Styles.apply("^\\([ \t]*\\)\\([<+-]\\) \\(.+?:\\) +\\(|.*\n\\)", nil, :default, :ls_bullet, :notes_label, :ls_quote)
+        Styles.apply("^\\([ \t]*\\)\\([<+-]\\) \\([^(\n]+?)\\) +\\(|.*\n\\)", nil, :default, :ls_bullet, :notes_label, :ls_quote)
+
+        Styles.apply("^ *\\(!.*\n\\)", nil, :ls_quote)   # ^!... for code
+
+        # exclamation! / todo
+        Styles.apply("^[ \t]*\\([<+-]\\) \\(.*!\\)$", nil, :ls_bullet, :notes_exclamation)
+        Styles.apply("^ +\\(!\\+.*\n\\)", nil, :diff_green)   # Whole lines
+        Styles.apply("^ +\\(!-.*\n\\)", nil, :diff_red)
+
+        Styles.apply("\\(\(-\\)\\(.+?\\)\\(-\)\\)", nil, :diff_small, :diff_red, :diff_small)
+        Styles.apply("\\(\(\\+\\)\\(.+?\\)\\(\\+\)\\)", nil, :diff_small, :diff_green, :diff_small)
+
+        # google/
+        Styles.apply "^ *\\(-?\\) ?\\([@=]?\\)\\(g\\)\\(o\\)\\(o\\)\\(g\\)\\(l\\)\\(e\\)\\(/\\)", nil, :ls_bullet, :ls_dir,   # google
+          :notes_blue, :notes_red, :notes_yellow, :notes_blue, :notes_green, :notes_red,
+          :ls_dir
+
+        Styles.apply "^hint/.+", :fade6
+
+        # $..., %..., etc.
+        Styles.apply "^[< ]*[@=]? ?\\([%$&!]\\)\\( \\|$\\)", nil, :shell_prompt   # Colorize shell prompts after "@"
+
+        # $$...
+        Styles.apply "^[< ]*[@=]? ?\\(\\$\\$\\)", nil, :shell_prompt   # Colorize shell prompts after "@"
+
+        # Make |~... lines be Dotsies
+        Styles.apply("^ *\\(|~\\)\\([^\n~]+\\)\\(~?\\)", nil, :quote_heading_pipe, :dotsies, :quote_heading_pipe)
+
+        # |#... invisible
+        Styles.apply("^ *\\(|[#*].*\n\\)", nil, :hidden)
+
+        Styles.apply "^ *|\\^.*\n", :quote_medium
+
+        Styles.apply("^ *\\(<\\) \\(.*\n\\)", nil, :ls_bullet, :ls_quote)   # <...
+
+        # Experimental
+        Styles.apply("^ *\\(<[a-z]+\\) \\(.*\n\\)", nil, :ls_bullet, :ls_quote)   # <...
+
+      end
+
     end
 
     # Startup
@@ -531,14 +556,17 @@ module Xiki
         FileTree.apply_styles
         Notes.apply_styles
         FileTree.apply_styles_at_end
+
         $el.use_local_map $el.elvar.notes_mode_map
-        Notes.chdir_when_xsh_session
+        Xsh.chdir_when_xsh_session
+        View.tab_width 12
       }
       $el.el4r_lisp_eval %q<
         (progn
           (add-to-list 'auto-mode-alist '("\\\\.notes\\\\'" . notes-mode))
           (add-to-list 'auto-mode-alist '("\\\\.xik\\\\'" . notes-mode))
-          (add-to-list 'auto-mode-alist '("\\\\.wik\\\\'" . notes-mode)))
+          (add-to-list 'auto-mode-alist '("/conf/.*\\\\.conf\\\\'" . notes-mode))
+        )
         >
     end
 
@@ -571,7 +599,7 @@ module Xiki
         Deletes.delete_whitespace
       end
 
-      if prepend =~ /^\| /
+      if prepend =~ /^[|:] /
         prefix = prefix == :u ? nil : :u
       end
 
@@ -592,11 +620,11 @@ module Xiki
 
       if prefix == :u
         Move.forward if Line.at_right?
-        return Tree.collapse
+        return Tree.collapse_upward
       end
 
       if prefix == :uu
-        return Tree.collapse :replace_parent=>1
+        return Tree.collapse_upward :replace_parent=>1
       end
 
       line = Line.value
@@ -678,7 +706,7 @@ module Xiki
           end
 
         else   # If -, kill under
-          Tree.kill_under
+          Tree.collapse
           Line.to_beginning
         end
         return
@@ -729,10 +757,17 @@ module Xiki
 
       label = nil
 
+      Effects.blink(:what=>:line)
+
+      was_visible = View.file_visible? Bookmarks[':n']
+
       if prefix == :u
-        label = Keys.input :prompt=>"label: ", :timed=>1
+        label = Keys.input :prompt=>"label: "
         label = "do" if label.blank?
         label = Notes.expand_if_action_abbrev(label) || label
+
+        # Only add ")" at end of label if not "!" at end
+        label = "#{label})" if label !~ /!$/
 
         prefix = nil
       end
@@ -758,7 +793,7 @@ module Xiki
 
         options[:path] = txt[0..-2].join
         if Search.fit_in_snippet(txt[-1], :path=>txt[0..-2].join)   # Insert it in existing tree if there
-          View << "    - #{label})\n" if label
+          View << "    - #{label}\n" if label
           return orig.go
         end
 
@@ -769,14 +804,16 @@ module Xiki
       file = View.file
 
       if Search.fit_in_snippet(txt)   # Insert it in existing tree if there
-        View << "    - #{label})\n" if label
-        return orig.go
+        View << "    - #{label}\n" if label
+
+        orig.go if was_visible   # Go to original place, if :n was already visible
+        return
       end
 
       # Make it quoted, unless already a quote
       if keep_tweeking && (txt !~ /\A([+-] |\/)/ || txt !~ /^ +/)   # If txt isn't already a tree, make it one
         txt = FileTree.snippet :txt=>txt, :file=>file
-        txt.sub! /^    /, "    - #{label})\n    " if label
+        txt.sub! /^    /, "    - #{label}\n    " if label
       end
 
       # Else, add it to top...
@@ -797,8 +834,9 @@ module Xiki
       end
 
       View.<< result, :dont_move=>1
+      Line.next 3
 
-      orig.go
+      orig.go if was_visible   # Go to original place, if :n was already visible
     end
 
 
@@ -816,6 +854,8 @@ module Xiki
 
       # If method, make it Foo.bar method call
       line = Line.value
+
+      Effects.blink(:what=>:line)
 
       if ! selection && View.file =~ /_spec.rb/ && line =~ /^ *(it|describe) /
         return Specs.enter_as_rspec
@@ -964,7 +1004,7 @@ module Xiki
       Line << "#{indent}- )"
       Move.backward
 
-      txt = options[:txt] || Keys.input(:timed=>1, :prompt=>'Your note (or a letter as a shortcut): ')
+      txt = options[:txt] || Keys.input(:prompt=>'Your note (or a letter as a shortcut): ')
 
       expanded = self.expand_if_action_abbrev txt
 
@@ -978,7 +1018,6 @@ module Xiki
 
       if expanded =~ /^[!:]$/
         Move.left
-        ControlLock.disable
       end
 
       if expanded
@@ -1020,7 +1059,7 @@ module Xiki
     #   - accounts.rb
     #     | class Accounts
     #     |   def self.menu *args
-    #     |     Notes.drill '$accounts', *args
+    #     |     Notes.drill ':accounts', *args
     #     |   end
     #     | end
     #
@@ -1033,7 +1072,7 @@ module Xiki
       # Pull off options, to get prefix
 
       options = args[-1].is_a?(Hash) ? args.pop : {}
-      dropdown = options[:dropdown]
+      task = options[:task]
 
       # Divide up path.  Could look like this:
         # dir/dir/> heading/| contents
@@ -1082,12 +1121,12 @@ module Xiki
 
       if file =~ /^\$(\w+)/   # If bookmark that wasn't found, complain
         bm = $1
-        return "| Set the following bookmark first. Then you'll be able to use this menu to\n| browse the file. The file should have '> ...' headings.\n\n@ $#{bm}\n"
+        return "| Set the following bookmark first. Then you'll be able to use this menu to\n| browse the file. The file should have '> ...' headings.\n\n@ :#{bm}\n"
       end
 
       if ! File.exists? file
         return "
-          : File doesn't exist yet.  Type Ctrl+D to create it:
+          : File doesn't exist yet.  Type Ctrl+T to create it:
           =#{file}
             : > Heading
             : Stuff
@@ -1100,9 +1139,9 @@ module Xiki
 
       if ! heading
 
-        return "~ headings\n~ navigate" if dropdown == []
+        return "~ headings\n~ navigate" if task == []
 
-        if dropdown == ["navigate"]   # If as+open, just jump there
+        if task == ["navigate"]   # If as+open, just jump there
           View.open file
           return ""
         end
@@ -1120,8 +1159,11 @@ module Xiki
 
       if ! content
 
-        return "~ navigate\n~ expand" if dropdown == []
-        if dropdown == ['expand']
+        return "~ navigate\n~ expand" if task == []
+
+        # No '~ navigate' task, so always expand...
+
+        if task != ['navigate']
           txt = self.extract_block txt, heading
           txt.sub! /\n\z/, ''
 
@@ -1129,8 +1171,12 @@ module Xiki
 
           txt = "Create this new section by typing\nsome stuff here and expanding.\n" if txt.blank?
 
+          # Don't do this for now, since it'll probably look ugly/confusing to new xsh users, and headings for ~/xiki/notes files navigate instead of expanding now anyway
           # Change "| foo/" to "=foo/" > add equals char for certain patterns
-          txt = Tree.quote txt, :unquote_menus=>1, :char=>"|"
+          #           txt = Tree.quote txt, :unquote_menus=>1, :char=>"|"
+
+          txt = Tree.pipe "#{txt}\n"
+
           return txt
         end
 
@@ -1146,12 +1192,12 @@ module Xiki
 
       # /> Heading/| content, so navigate or save...
 
-      return "~ save\n~ navigate" if dropdown == []
+      return "~ save\n~ navigate" if task == []
 
 
-      # Update...
+      # Save, so replace or add...
 
-      if dropdown == ["save"]
+      if task == ["save"]
 
         # Extract parts from the file that won't change
         index = txt.index /^#{escaped_heading}$/
@@ -1180,7 +1226,7 @@ module Xiki
 
           content = Tree.siblings :children=>1   # Content we're saving
           content.gsub! /^[|:] ?|^=/, ''
-          txt = "#{txt.strip}\n\n#{heading}\n#{content}"
+          txt = "#{heading}\n#{content.strip}\n\n#{txt.strip}\n\n"
 
         end
 
@@ -1190,7 +1236,7 @@ module Xiki
 
       end
 
-      # No dropdown (or ~navigate), so navigate to heading and put cursor on line...
+      # No task (or ~navigate), so navigate to heading and put cursor on line...
 
       View.open file
       View.to_highest
@@ -1220,11 +1266,18 @@ module Xiki
 
       path = Tree.path
 
-      if Line.at_right? &&   # Cursor is at the right, and
-        ((path.length == 1 && path[0] =~ /^\$( |$)/) ||   # A single "$ ..." path
-          (FileTree.handles?(path[-1]) && Path.split(path[-1])[-1] =~ /^\$ /))   # Or a file path ending in a "$ ..." line
+      # $... path, so run Xiki command for the shell command
+
+      if path[-1] =~ /^\$( |$)/ &&   # A $... line,
+        Line.at_right?   # and the cursor is at the right
 
         return Shell.tab
+      end
+
+      # /file/path, so just expand
+
+      if Line.at_right? && FileTree.handles?
+        return Launcher.launch
       end
 
       indent = Line.indent(Line.value 0)
@@ -1240,15 +1293,20 @@ module Xiki
     @@single_letter_abbrev = {
       " "=>"",
       "p"=>"",
-      "b"=>"borrow!",
+      "b"=>"borrow:",
       "c"=>":",
       "d"=>"do!",
+      "de"=>"delete!",
       "e"=>"!",
       "er"=>"error!",
       "f"=>"fix!",
+      "fa"=>"favorite!",
+      "fi"=>"finish!",
       "i"=>"implement!",
       "r"=>"rename!",
       "t"=>"todo!",
+      "te"=>"test",
+      "tr"=>"try",
       "u"=>"update!",
     }
 
@@ -1275,7 +1333,7 @@ module Xiki
       # Get user input...
 
       keys = Keys.input :optional=>1, :message=>"Which note? (Type a key or two): "
-      return open_or_insert.call "notes/" if ! keys
+      return open_or_insert.call "^" if ! keys
 
       # Get possible matches - files in ~/notes without extensions...
 
@@ -1287,15 +1345,16 @@ module Xiki
 
       return open_or_insert.call "notes/" if ! found
 
-      open_or_insert.call "notes/#{found}/"
+      open_or_insert.call "^"
+
       nil
     end
 
-    def self.open_tasks
+    def self.open_todo options={}
 
       prefix = Keys.prefix :clear=>1
 
-      file = Bookmarks[":t"]
+      file = Bookmarks[options[:bookmark] || ":t"]
 
       FileUtils.mkdir_p File.dirname(file)
 
@@ -1326,12 +1385,18 @@ module Xiki
     end
 
     def self.next_paren_label
+
       # Move forward if at beginning of line
       Move.forward if Line.at_left? && ! View.at_top?
-      found = Search.forward "^ *[+-] [a-zA-Z0-9 +']*)\\($\\| \\)", :beginning=>true
+      found = Search.forward "^ *[+-] [a-zA-Z0-9 +'.>_-]*)\\($\\| \\)", :beginning=>true
       return Move.backward if ! found
-      # label for the next line, so move to next line
-      Line.to_next if Line[/^ *[+-] [a-zA-Z0-9 +']*\)$/]   # '
+
+      # Label for the next line, so move to next line
+      self.next_line_when_paren_label
+    end
+
+    def self.next_line_when_paren_label
+      Line.to_next if Line[/^ *[+-] [a-zA-Z0-9 +'.>_-]*\)$/]   # '
     end
 
     def self.extract_paren_labels options={}
@@ -1340,22 +1405,25 @@ module Xiki
 
       file, limit, indent = options[:file], options[:limit], options[:indent]
 
-      path = View.file_or_temp_file(:file=>file)
+      path = View.as_file_or_temp_file(:file=>file)
       extract_from_next_line = nil
       label = nil
       IO.foreach(path, *Files.encoding_binary) do |line|
+        break if limit <= 0
 
         # The previous line was a blank label, ...
 
         if label == ""
           label = line[/\w.*/]
+          next if ! label
           label.sub! /\/$/, ''   # No slashes at end
+          limit -= 1
           txt << "#{indent}+ #{label}\n"
           label = nil
           next
         end
 
-        label = line[/^ *[+-] ([\w .+'>]*)\)( |$)/, 1]   # ' > label regex
+        label = line[/^ *[+-] ([\w .+'>_-]*)\)( |$)/, 1]   # ' > label regex
         next if ! label
 
         if label == ""
@@ -1366,7 +1434,6 @@ module Xiki
 
         txt << "#{indent}+ #{label}\n"
         limit -= 1
-        break if limit <= 0
       end
 
       txt
@@ -1378,26 +1445,6 @@ module Xiki
       ignore, left, right = View.block_positions "^>"   # Regex works with >\n lines
       $el.narrow_to_region left, right
     end
-
-
-    def self.chdir_when_xsh_session
-
-      # Only do something if this is a xsh session file...
-
-      return if ! View.file_name || View.dir != Bookmarks["~/xiki/sessions"]
-
-      # Change the dir to where it was originally created!
-
-      original_dir = File.read File.expand_path("~/xiki/misc/sessions_dirs/#{View.file_name}") rescue nil
-
-      if ! original_dir
-        # Todo > try to re-associate the file (via the file id thing I researched)
-        return
-      end
-
-      Shell.cd original_dir
-    end
-
 
 
     def self.heading
@@ -1437,6 +1484,54 @@ module Xiki
       end
 
       nil
+    end
+
+
+    def self.return_wrapper
+
+      Keys.remember_key_for_repeat(proc {Notes.return_wrapper})
+
+      # Add a linebreak
+
+      line = Line.value
+
+      Keys.prefix_times do
+        View << "\n"
+      end
+
+      # Weren't at end of a "$ foo", so do nothing else...
+
+      return if line !~ /^\$ ./ || ! Line.at_right?
+
+      # Var not bound yet, so sync with disk...
+
+      if ! $el.boundp(:xiki_return_warning)
+        disk_value = Conf.get "xsh", "return warning"
+        # Set to disk value or default (4)
+        $el.elvar.xiki_return_warning = disk_value || "4"
+      end
+
+      # Just because reading from the elisp var is slightly slower than the ruby var
+      value_orig = $el.elvar.xiki_return_warning
+
+      # 0, so just return...
+
+      return if value_orig == "0"
+
+      # Decrement it
+      value_new = (value_orig.to_i - 1).to_s
+      $el.elvar.xiki_return_warning = value_new
+
+      # Write new value to disk
+
+      Conf.put "xsh", "return warning", value_new
+
+      # Flash that many times
+
+      View.flash "- Typing return just adds a linebreak!", :times=>value_orig.to_i
+      View.pause 0.6
+      View.flash "- Use Ctrl+X to execute a command!", :times=>value_orig.to_i
+
     end
 
   end

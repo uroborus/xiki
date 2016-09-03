@@ -58,13 +58,27 @@ describe Path, "#split" do
   end
 
   it "splits ancestors when :outer" do
-    Path.split("a/b/@c/d/", :outer=>1).should == ["a/b/", "c/d/"]
+    Path.split("a/b/=c/d/", :outer=>1).should == ["a/b/", "c/d/"]
   end
   it "doesn't get confused by escaped slashes before ats" do
-    Path.split("a/b;/@c/d/", :outer=>1).should == ["a/b;/@c/d/"]
+    Path.split("a/b;/=c/d/", :outer=>1).should == ["a/b;/=c/d/"]
   end
   it "doesn't get confused by escaped slashes ats" do
-    Path.split("a/b;/@c/d/", :outer=>1).should == ["a/b;/@c/d/"]
+    Path.split("a/b;/=c/d/", :outer=>1).should == ["a/b;/=c/d/"]
+  end
+
+  it "splits on dollar signs when command" do
+    Path.split("a/$ f", :outer=>1).should == ["a/", "$ f"]
+  end
+  it "splits on dollar signs when blank prompt in middle" do
+    Path.split("a/$/b", :outer=>1).should == ["a/", "$/b"]
+  end
+  it "splits on dollar signs when blank prompt at end" do
+    Path.split("a/$", :outer=>1).should == ["a/", "$"]
+  end
+
+  it "doesn't split when dollar whitout space after it" do
+    Path.split("a/$f", :outer=>1).should == ["a/$f"]
   end
 
 

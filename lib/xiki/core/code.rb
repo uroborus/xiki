@@ -50,7 +50,7 @@ module Xiki
 
         # Line is blank, so insert a comment...
 
-        return Code.enter_insert_comment if line =~ /^ *$/
+        return self.enter_insert_comment if line =~ /^ *$/
 
       elsif prefix == 0   # If 0 prefix, comment paragraph
         left, right = View.paragraph(:bounds => true)
@@ -255,10 +255,10 @@ module Xiki
       stdout = nil
       exception = nil
 
-      begin   # Run code
+      # Run the code...
 
+      begin
         returned = self.eval_inner code, file, line, eval_options, options
-
       rescue Exception => e
         exception = e
       end
@@ -287,6 +287,9 @@ module Xiki
 
     def self.eval_inner code, file, line, eval_options, options
       target = eval_options[:target_module] || Object
+
+      # Put here to be made available to code being eval'ed
+      args, path, dir, task = options[:args_relative]||options[:args]||[], options[:path_relative]||options[:path], options[:dir], options[:task]
 
       if code.is_a? Proc
         target.module_eval &code
@@ -655,20 +658,11 @@ module Xiki
         return
       end
 
-      # If 2 or more windows open
-      if View.list.size == 2
-        View.to_nth(1)   # Go to 2rd
-      elsif View.list.size >= 3
-        View.to_nth(2)
-        unless View.left_edge == 0   # If 3nd not at left, go to 2nd
-          View.to_nth(1)
-          unless View.left_edge == 0   # If not at left, go to first
-            View.to_nth(0)
-          end
-          View.create
-        end
-      end
+      # If not in bar, open the bar
 
+      if ! View.bar?
+        View.bar
+      end
 
       # If buffer open (but not visible), just switch to it
       if View.buffer_open? buffer
@@ -705,15 +699,15 @@ module Xiki
       end
 
       prefix = Keys.prefix
-      if options[:exclamation] || prefix == :u || prefix == 1 || prefix == 3
-        extra = prefix == 3 ? "# " : ""
-        View.insert "Ol[\"#{extra}!\"]"
-        ControlLock.disable
-        return Move.backward 3
+
+      if prefix == 1 || options[:exclamation]
+        View.insert "Ol \"!\""
+        return Move.backward 2
       end
 
-      View.insert "Ol()"
-      Line.to_beginning
+      View.insert "Ol \"\""
+      Move.backward 1
+
     end
 
     def self.enter_log_out
@@ -777,7 +771,7 @@ module Xiki
       # Indent over, and add file path and percent...
 
       txt.gsub! /^/, "  "
-      txt = "#{View.file}\n#{txt}(#{View.percent}%)"
+      txt = "#{View.file}\n#{txt}(line #{View.line}, #{View.percent}%)"
 
       View.cursor = orig   # Go back in case we moved
 
@@ -868,7 +862,7 @@ module Xiki
     def self.enter_whitespace
 
       prefix = Keys.prefix :clear=>1
-      prefix = 0 if prefix == :u
+      prefix = 1 if prefix == :u
 
       # Selection, so surround with space...
       if View.selection?
@@ -923,7 +917,6 @@ module Xiki
         View.<< "...", :dont_move=>1
       end
 
-      ControlLock.disable    # insert date string (and time if C-u)
     end
 
     def self.launch_dot_at_end line
@@ -993,9 +986,21 @@ module Xiki
 
     def self.args options, opts={}
       "
-        args, path, dir, dropdown = options[:args]||[], options[:path], options[:dir], options[:dropdown]
+        args, path, dir, task = options[:args]||[], options[:path], options[:dir], options[:task]
       ".unindent
     end
+
+    # Load a file in the context of Xsh
+    def self.load path
+      path = Bookmarks[path]
+      self.eval File.read(path), path, 1
+    end
+
+
+    def self.cache key, &block
+      $el.cache key, &block
+    end
+
 
   end
 end

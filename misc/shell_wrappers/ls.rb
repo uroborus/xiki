@@ -1,5 +1,12 @@
 file = options[:dir] # || Shell.dir
 
+# $ ls, so make all lines have colons...
+
+if shell_output = options[:shell_root_output]
+  shell_output.gsub! /^\|/, ":"
+  return
+end
+
 command = options[:shell_command]
 
 command = "ls -p" if command == "ls"
@@ -26,20 +33,24 @@ file << relative
 
 # file, so open it...
 
-dropdown = options[:dropdown]
+task = options[:task]
 
 if File.file? file
 
-  # Dropdown, so show items...
+  # Task, so show items...
 
-  return "~ edit/\n~ rename\n~ delete\n~ all\n~ outline\n~ search" if dropdown == []
-  if dropdown == ["edit"]
+  if task == []
+    return "~ edit/\n~ contents/\n~ rename\n~ delete\n~ all\n~ outline\n~ search"
+  end
+
+  if task == ["contents"]
+    return Tree.quote File.read(file)
+  elsif task == ["edit"]
     options[:nest] = 1
-    return "+ emacs/\n+ vim/\n+ sublime/"
-  elsif dropdown == ["edit", "vim"]
-    $el.suspend_emacs "clear\nvim '#{file}'"
-    return ""
-  elsif dropdown == ["edit", "sublime"]
+    return "+ sublime\n+ vim\n+ emacs\n+ default"
+  elsif task == ["edit", "vim"]
+    return DiffLog.quit_and_run "vim #{file}"
+  elsif task == ["edit", "sublime"]
     Shell.sync "subl '#{file}'"
     return "<! opened in Sublime"
   end
@@ -50,11 +61,11 @@ end
 
 # dir, so do another ls...
 
-# dropdown, so render...
+# task, so render...
 
-return "~ cd and exit\n~ cd\n~ delete\n~ rename\n~ shell command" if dropdown == []
+return "~ cd and exit\n~ cd\n~ delete\n~ rename\n~ shell command" if task == []
 
-if dropdown == ["cd and exit"]
+if task == ["cd and exit"]
   file = Files.tilda_for_home file, :escape=>1
   $el.suspend_emacs "clear\ncd #{file}"
   return ""

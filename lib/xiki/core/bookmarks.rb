@@ -20,7 +20,7 @@ module Xiki
         =p Bookmarks[":t"]
         |
         | > Expand bookmark in a path
-        =p Bookmarks["$tm/hi.txt"]
+        =p Bookmarks[":tm/hi.txt"]
         |
         > Where Emacs stores bookmarks
         =~/.emacs.bmk
@@ -56,8 +56,10 @@ module Xiki
       if ! Keys.prefix_u? && in_a_file_tree && ! Line[/^ *\|/]
         path = Tree.construct_path
         keys = Keys.input(:timed=>true, :prompt=>"Name of bookmark for #{path.sub(/.+\/(.)/, "\\1")}: ") || "0"
+        path = File.expand_path path, View.dir
+
         self.set keys, :file=>path
-        View.flash "- bookmarked as: $#{keys}", :times=>3
+        View.flash "- bookmarked as: :#{keys}", :times=>3
         return
       end
 
@@ -67,7 +69,7 @@ module Xiki
       if arg && arg.class == Symbol
         prefix = arg.to_s
       elsif arg && arg.class == String
-        self.set(arg.sub(/^\$/, ""))
+        self.set(arg.sub(/^\:/, ""))
         return
       end
 
@@ -85,13 +87,17 @@ module Xiki
       end
     end
 
-    # Like bookmark-set, but accepts buffers
+    # Lower level method > saves actual bookmark
     def self.set name, options={}
 
       file = options[:file] || View.file
       file = self.bookmarkify_path file
 
-      File.open(File.expand_path("~/xiki/bookmarks/#{name}.notes"), "w") { |f| f << "#{file}\n" }
+      dir = File.expand_path "~/xiki/bookmarks/"
+
+      FileUtils.mkdir_p dir
+
+      File.open("#{dir}/#{name}.notes", "w") { |f| f << "#{file}\n" }
 
       # Handle bookmarks for buffers?
       # Format of file?
@@ -110,14 +116,19 @@ module Xiki
         prefix_to_bm = bookmark.to_s
       elsif bookmark && bookmark.class == String
         keys = bookmark
-        #       return self.jump(bookmark.sub(/^\$/, ""))
       end
 
       # Use input from user or "default"
       keys ||= Keys.input(:timed=>true, :prompt=>"Type ., /, or a bookmark: ") || "0"
 
+      return if keys == "\e"   # They typed escape
+
       # Non-word, so delegate to FileTree.tree, since it knows how to hilight the current file
-      return FileTree.tree :bm=>keys if keys =~ /^[.\/]+$/
+
+      if keys =~ /^[.\/]+$/
+        keys.sub! /^\./, ".."   # Add another dot, so it shows the dir, not the file
+        return FileTree.tree :bm=>keys
+      end
 
       path = keys =~ /^\w/ ?
         Bookmarks[":#{prefix_to_bm}#{keys}"] :
@@ -129,7 +140,7 @@ module Xiki
 
       # If up+, open bookmark as menu
       if prefix == :u
-        Launcher.open "$#{keys}//" #, :unified=>1
+        Launcher.open ":#{keys}//" #, :unified=>1
         return
       elsif prefix == :uu   # Jump up one level if up+up+
         path = File.dirname path
@@ -150,17 +161,13 @@ module Xiki
     end
 
     @@bookmarks_required = {
-      "hx"=>"~/xiki/",
       "x"=>"~/xiki/",
-
+      "xh"=>"~/xiki/",
+      "home"=>"~/",
       "xiki"=>Xiki.dir,
       "source"=>Xiki.dir,
+      "xs"=>Xiki.dir,
       "s"=>Xiki.dir,
-
-      "xiki"=>Files.tilda_for_home(Xiki.dir),
-      "source"=>Files.tilda_for_home(Xiki.dir),
-      "s"=>Files.tilda_for_home(Xiki.dir),
-
     }
 
     # Bookmarks.bookmarks_optional "t"
@@ -178,36 +185,49 @@ module Xiki
       "tm"=>"/tmp/",
       "et"=>"/etc/",
       "b"=>"~/xiki/bookmarks/",
-
-      "se"=>"~/xiki/sessions/",
-      "t"=>"~/xiki/tasks.notes",
-      "tasks"=>"~/xiki/tasks.notes",
-      "f"=>"~/xiki/files.notes",
-      "files"=>"~/xiki/files.notes",
-
-      "n"=>"~/xiki/notes/",
-      "c"=>"~/xiki/commands/",
-      "cf"=>"~/xiki/commands/conf/",
-
       "dl"=>"~/Downloads/",
 
+      "br"=>"~/.bashrc",
+      "de"=>"~/.emacs",
+
+      "se"=>"~/xiki/sessions/",
+      "t"=>"~/xiki/todo.notes",
+      "todo"=>"~/xiki/todo.notes",
+      "n"=>"~/xiki/nav.notes",
+      "nav"=>"~/xiki/nav.notes",
+
+      "no"=>"~/xiki/notes/",
+      "c"=>"~/xiki/commands/",
+      "co"=>"~/xiki/commands/conf/",
+      "co2"=>"#{Xiki.dir}commands/conf/",
+
       "q"=>"~/xiki/notes/quick.notes",
+      "qq"=>"~/xiki/notes/quick2.notes",
+      "ti"=>"~/xiki/notes/timer.notes",
+      "fa"=>"~/xiki/notes/facts.notes",
 
       "xc"=>"#{Xiki.dir}commands",
       "c2"=>"#{Xiki.dir}commands",
 
+      "cp"=>"#{Xiki.dir}commands/patterns/core_patterns.rb",
+
       "ir"=>"#{Xiki.dir}misc/emacs/el4r/init.rb",
       "th"=>"#{Xiki.dir}misc/themes/",
+      "li"=>"#{Xiki.dir}lib/",
+      "xs"=>"#{Xiki.dir}spec/",
 
       "m"=>"~/xiki/misc/",
+      "e"=>"~/xiki/misc/shell_examples/",
       "v"=>"~/xiki/misc/versions/",
       "lo"=>"~/xiki/misc/logs/",
-      "fa"=>"~/xiki/misc/favorites/",
+      "diff"=>"~/xiki/misc/logs/difflog.notes",
+      "f"=>"~/xiki/misc/favorites/",
       "st"=>"~/xiki/misc/startup.rb",
-      "cl"=>"~/xiki/misc/logs/command_log.notes",
+      "cl"=>"~/xiki/misc/logs/xiki_commands_log.notes",
       "pi"=>"~/Pictures/",
       "k"=>"#{Xiki.dir}lib/xiki/core/key_shortcuts.rb",
       "us"=>"/usr/",
+      "lo"=>"/usr/local/",
       "ap"=>"/Applications/",
       "vo"=>"/Volumes/",
     }
@@ -238,9 +258,13 @@ module Xiki
         bm, slash, rest = path, nil, nil
       elsif path =~ /^:([._a-zA-Z0-9-]+)([\\\/]?)(.*)/   # Path starts with $xxx, so pull it out and look it up...
         bm, slash, rest = $1, $2, $3
-      elsif path =~ /^\$([._a-zA-Z0-9-]+)([\\\/]?)(.*)/   # Path starts with $xxx, so pull it out and look it up...
-        bm, slash, rest = $1, $2, $3
-        Ol["Deprecated > use :... instead > #{path}!"]
+
+
+      # Just leave in for a bit, to catch deprecated $foo... paths
+      elsif path =~ /^\$[._a-zA-Z0-9-]+(\/|$)/   # Path starts with $xxx, so pull it out and look it up...
+        Ol.stack 7
+        raise "Don't use $..., use :... > #{path}!"
+
       else   # If no $..., just return the literal path...
         return path
       end
@@ -325,10 +349,10 @@ module Xiki
     # Bookmarks.bookmarkify_path "/Users/craig/xiki/misc/logs/"
     def self.bookmarkify_path path
 
-      # Expand out tilda in path if not there, since paths in bookmarks have tildas
+      # Expand out tilde in path if not there, since paths in bookmarks have tildes
 
       path = Files.tilda_for_home path
-      bookmarks = self.bookmarks_required   # => {"hx"=>"~/xiki/", "x"=>"~/xiki/", "xiki"=>"/Users/craig/Dropbox/xiki/", "source"=>"/Users/craig/Dropbox/xiki/", "s"=>"/Users/craig/Dropbox/xiki/"}
+      bookmarks = self.bookmarks_required
 
       self.bookmarks_required.each do |bookmark, dir|
         return path.sub(/^#{dir}/, ":#{bookmark}/") if path =~ /^#{dir}/

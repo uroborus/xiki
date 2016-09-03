@@ -233,7 +233,8 @@ class Ol
   end
 
   def self.b *args
-    self.a *args, :truncate=>1
+    args << {:truncate=>1}
+    self.a *args#, :truncate=>1
   end
 
   def self.a *args
@@ -343,7 +344,7 @@ class Ol
 
   def self.parse_line path
     method = path[/`(.+)'/, 1]   # `
-    path, l = path.match(/(.+):(\d+)/)[1..2] # rescue ['not found', '1']
+    path, l = path.match(/(.+):(\d+)/)[1..2] rescue ['not found', '1']
     path = File.expand_path path
     clazz = path[/.+\/(.+)\.rb/, 1]
     clazz = self.camel_case(clazz) if clazz
@@ -563,7 +564,7 @@ def Ol *args
     if args == []
       nil
     elsif args.length == 1   # Just text
-      args[0].inspect
+      args[0].is_a?(String) ? args[0] : args[0].inspect
     else   # Label and text
       "#{args[0]}: #{args[1].inspect}"
     end

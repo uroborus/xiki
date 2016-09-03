@@ -5,17 +5,36 @@
 ; Define keys to reload and jump...
 ; This function is called from the Xiki config
 (defun el4r-troubleshooting-keys ()
-  (global-set-key (kbd "C-x C-r") 'el4r-kill-and-restart)   ; xiki+reload (C-x C-r)
-  (global-set-key (kbd "C-x C-l") 'el4r-jump-to-error)      ; xiki+log (C-x C-l)
+
+  ; Reload
+  (global-set-key (kbd "M-r") 'el4r-kill-and-restart)
+  (global-set-key [174] 'el4r-kill-and-restart)   ; For Terminal.app, in emacs24
+  (global-set-key [2222] 'el4r-kill-and-restart)   ; For Terminal.app, in emacs22
+
+  ; Jump to log and show error
+  (global-set-key (kbd "M-l") 'el4r-jump-to-error)
+  (global-set-key [172] 'el4r-jump-to-error)   ; For Terminal.app, in emacs24
+  (global-set-key [2220] 'el4r-jump-to-error)   ; For Terminal.app, in emacs22
+
+)
+
+(defun ol (txt)
+  (el4r-ruby-eval
+    (if (stringp txt)
+      (concat "Ol \"" txt "\"")   ; String, so no need to inspect
+      (concat "Ol \"" (replace-regexp-in-string "\"" "\\\\\"" (pp-to-string txt)) "\"")
+    )
   )
+)
 
 (or (>= emacs-major-version 21)
-    (error "Sorry, el4r requires (X)Emacs21 or later, because it uses weak hash."))
+    (error "Sorry, el4r requires (X)Emacs21 or later, because it uses weak hashes."))
 
 (put 'el4r-ruby-error
      'error-conditions
      '(error el4r-ruby-error))
-(put 'el4r-ruby-error 'error-message "Error raised in Ruby.  Type Ctrl+x Ctrl+r to reload or Ctrl+x Ctrl+l to show the log with the error message.")
+
+(put 'el4r-ruby-error 'error-message "Error raised in Ruby.  Type Alt+R (or Option+R) to reload or Alt+L (or Option+L) to show the log with the error message.")
 
 (defvar el4r-ruby-program
   "ruby"
@@ -75,7 +94,7 @@
   (el4r-init)
   (el4r-ruby-eval
     (if noinit "el4r_boot__noinit" "el4r_boot"))
-  )
+)
 
 (defun el4r-shutdown ()
   "Shutdown el4r."
@@ -99,17 +118,61 @@
 
 (defun el4r-override-variables ())
 
+(defun el4r-ruby18-error ()
+  (global-set-key "\C-q" 'kill-emacs)
+
+  (run-with-idle-timer 0.2 nil (lambda ()
+    (switch-to-buffer "ruby 1.8 error")
+    (xterm-mouse-mode -1)
+    (delete-region (point-min) (point-max))
+    (insert "Your ruby version is 1.8, which is a really old version.
+
+Ruby 1.9 or newer is required. Please install it, so that
+when you run this, it shows ruby 1.9 or higher:
+
+  $ ruby --version
+
+1. Type Ctrl+Q to exit xsh.
+2. Then upgrade ruby.
+3. Then try running xsh again.
+
+You may need to do something like:
+
+  $ sudo apt-get install ruby1.9.3
+  $ sudo ln -sf /usr/bin/ruby1.9.3 /usr/bin/ruby
+
+")
+  ))
+  nil
+)
+
 (defun el4r-init ()
   ;; In many cases  (eq el4r-process (get-buffer-process el4r-process-bufname))
   ;; But this sexp is nil when el4r-instance is accidentally dead.
   (and (get-buffer-process el4r-process-bufname) (el4r-shutdown))
 
-  (call-process-and-eval el4r-ruby-program (concat (getenv "XIKI_DIR") "/misc/emacs/el4r/.el4rrc.rb"))
+  (setq
+    el4r-lisp-object-gc-trigger-count 100
+    el4r-lisp-object-gc-trigger-increment 100
+    el4r-ruby-gc-trigger-count 100
+    el4r-ruby-gc-trigger-increment 100
+    el4r-log-buffer "*el4r:log*"
+    el4r-output-buffer "*el4r:output*"
+    el4r-unittest-lisp-object-gc-trigger-count 5000
+    el4r-unittest-lisp-object-gc-trigger-increment 5000
+    el4r-unittest-ruby-gc-trigger-count 5000
+    el4r-unittest-ruby-gc-trigger-increment 5000
+    el4r-temp-file "/var/folders/66/3h81t2y913vf344z6fb2cks00000gn/T/el4r-tmp.tmp"
+
+    el4r-instance-program (concat (getenv "XIKI_DIR") "/misc/emacs/el4r/el4r-instance")
+
+  )
 
   (el4r-override-variables)
   (setq el4r-lisp-object-hash (make-hash-table :test 'eq))
   (setq el4r-ruby-object-weakhash (make-hash-table :test 'eq :weakness 'value))
   (setq el4r-defun-lambdas nil)
+
   (let ((buffer el4r-process-bufname)
         (process-connection-type nil))  ; Use a pipe.
     (and (get-buffer buffer) (kill-buffer buffer))
@@ -135,7 +198,15 @@
                 (accept-process-output process-name)
               )
 
-              (message "el4r > tried 2nd")
+              ; If the script returned (lisp code) while forking, it's probably an error about ruby 1.8, so eval it
+              (with-current-buffer "*xiki-forker*"
+                (when (and (> (point-max) 1) (string= (buffer-substring 1 2) "("))
+                  ;; (let ((txt (el4r-scan-expr-from-ruby-inner))) (eval (read txt)))
+                  (eval (read (el4r-scan-expr-from-ruby-inner)))
+                )
+              )
+
+              (message "el4r > tried 2nd time")
               (make-network-process :remote (expand-file-name "~/.xikisock") :name el4r-process-name :buffer buffer)
             )
             (error
@@ -160,37 +231,90 @@
   (or (eq (process-status el4r-process) 'run) (eq (process-status el4r-process) 'open)
       (error "el4r-instance is dead.")))
 
+; Grabs elisp code from the *el4r:process* buffer
 (defun el4r-scan-expr-from-ruby ()
   (with-current-buffer el4r-process-bufname
-    (goto-char (point-min))
-    (save-match-data
-      (let ((point-after-zero (search-forward "\0" nil t))
-            expr)
-        (if point-after-zero
-            (progn
-              (setq expr
-                    (buffer-substring (point-min) (- point-after-zero 1)))
-              (delete-region (point-min) point-after-zero)
-              expr
-              )))
-    )))
+    (el4r-scan-expr-from-ruby-inner)
+  )
+)
+
+; Pulls (ruby code) out of the current buffer, up until ^@.
+(defun el4r-scan-expr-from-ruby-inner ()
+  (goto-char (point-min))
+  (save-match-data
+    (let ((point-after-zero (search-forward "\0" nil t))
+          expr)
+      (if point-after-zero
+        (progn
+          (setq expr
+                (buffer-substring (point-min) (- point-after-zero 1)))
+          (delete-region (point-min) point-after-zero)
+          expr
+        )
+      )
+    )
+  )
+)
 
 
-;; All of a sudden, the original old accept-process-output
-;; method seems to work, so this hack is no longer necessary.
-;; (if (string-match "Emacs 2[34].+apple-" (emacs-version))   ;; If emacs 23 or 24 on the Mac, do work-around
-(if nil
+; Alternate method that loops and continually checks to see if el4r is
+; still running. If we hit escape, it cancels out of it.
+; We're using this all the time now, because it allows user to interrupt
+; long-running operations by typing esc.
+
+(if t
+
   ; Work-around
   (defun el4r-recv ()
-    (let ((expr))
-      (while (eq nil (progn (setq expr (el4r-scan-expr-from-ruby)) expr))
+    (let ((lock-time 20000) (expr) (deactivate-mark-orig deactivate-mark) (limit 0) (succeeded t))
+
+      ; 1. Check frequently for a couple seconds, with no chance of interruption...
+
+      (while (and (< limit lock-time) (eq nil (progn (setq expr (el4r-scan-expr-from-ruby)) expr)))
         (el4r-check-alive)
-        ; Call alterative version that loops and waits
-        ; to avoid severe slowdown with (accept-process-output)
-        ; on Mac Emacs23+ versions.
-        (accept-process-output2 el4r-process))
-      expr))
-  ; Original method
+        (sleep-for 0.00001)
+        (setq limit (1+ limit))
+      )
+
+      ; 2. Exceeded that, so check somewhat frequently, watching for an interruption...
+
+      (when (>= limit lock-time)
+
+        (message "Command taking a while. Press esc to cancel.")
+
+        (setq succeeded (sit-for 0.1))
+
+        (while (eq nil (progn (setq expr (el4r-scan-expr-from-ruby)) expr))
+          ; Wait a bit
+          (setq succeeded (sit-for 0.1))
+
+          ; Original > check for escape and following events
+          (if (and (not succeeded) (next-event-is-escape))
+            (progn
+
+              ; Move to the beginning of the command, to indicate it's cancelled
+              (beginning-of-line)
+              (skip-chars-forward " -$%")
+              (setq quit-flag t)
+
+            )
+            ; Re-display message > it's going away for some reason
+            (message "Command taking a while. Press esc to cancel.")
+          )
+
+          ; Else, keep on going
+
+        )
+        (message "")   ; To clear "Command taking a while..." message
+      )
+
+      (if (not deactivate-mark-orig)   ; If mark wasn't set to deactivate before, don't let the above elisp deactivate it
+        (setq deactivate-mark nil)
+      )
+      expr
+    ))
+
+  ; Original method > disabled for now
   (defun el4r-recv ()
     (let ((expr) (deactivate-mark-orig deactivate-mark))
       (while (eq nil (progn (setq expr (el4r-scan-expr-from-ruby)) expr))
@@ -199,15 +323,9 @@
       (if (not deactivate-mark-orig)   ; If mark wasn't set to deactivate before, don't let the above elisp deactivate it
         (setq deactivate-mark nil)
       )
-      expr)))
+      expr))
 
-; Alterative version that loops
-(defun accept-process-output2 (process)
-  (save-match-data
-    (with-current-buffer (process-buffer process)
-      (while (or (eq (point-max) 1) (not (string-match "\0" (buffer-string))))
-        ;; (sleep-for 0.1)))))
-        (sleep-for 0.00001)))))
+)
 
 (defun el4r-send (rubyexpr)
   (el4r-check-alive)
@@ -335,13 +453,11 @@
           result2
           (progn
             ; Do stuff when C-g aborted half way through...
+
             (setq quit-flag nil)
 
             ; Send signal to raise exception  Kill process and start new?
-            (message "sending signal")
-            (prin1 xiki-child-pid)
             (signal-process xiki-child-pid 'SIGUSR1)
-            (message "sent signal")
 
           )
         )
@@ -515,11 +631,15 @@
 
 (defun el4r-kill-and-restart () (interactive)
   "Load .emacs (reloading EmacsRuby)"
+
   (let ((lock (control-lock-enabled)))
 
     ; Only kill if xiki running
     (when (or (eq (process-status el4r-process) 'run) (eq (process-status el4r-process) 'open))
-      (el4r-ruby-eval "Xiki.kill"))
+      (el4r-ruby-eval "Xiki.kill")
+      ; Give it time to die, so we don't error when trying to use ~/.xikisock again
+      (sleep-for 0.1)
+    )
 
     (when (get-buffer "*el4r:process*")
       (let (kill-buffer-query-functions)   ; So it doesn't prompt us to delete the buffer
